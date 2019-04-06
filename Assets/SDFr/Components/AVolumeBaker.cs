@@ -60,7 +60,7 @@ namespace SDFr
             if (mrs == null || mrs.Length == 0) return false;
 
             Bounds newBounds = new Bounds(transform.position,Vector3.zero);
-            
+            bool first = true;
             foreach (var r in mrs)
             {
                 if (!(r is MeshRenderer) && !(r is SkinnedMeshRenderer)) continue;
@@ -91,7 +91,8 @@ namespace SDFr
 
                     if (mesh != null)
                     {
-                        EncapsulateVertices(ref newBounds, mesh, r.localToWorldMatrix);
+                        EncapsulateVertices(ref newBounds, mesh, transform.worldToLocalMatrix * r.transform.localToWorldMatrix, first);
+                        first = false;
                     }
                 }
 
@@ -140,13 +141,25 @@ namespace SDFr
             return true;
         }
 
-        protected void EncapsulateVertices(ref Bounds newBounds, Mesh mesh, Matrix4x4 localToWorld )
+        protected void EncapsulateVertices(ref Bounds newBounds, Mesh mesh, Matrix4x4 localToWorld, bool first = false )
         {
             Vector3[] vertices = new Vector3[mesh.vertexCount];
             mesh.vertices.CopyTo(vertices,0);
-            foreach (Vector3 v in vertices)
+            
+            Vector3 vert = localToWorld.MultiplyPoint3x4(vertices[0]);
+            Bounds b = new Bounds(vert,Vector3.zero);
+            for ( int i=1; i<vertices.Length; i++)
             {
-                newBounds.Encapsulate(localToWorld.MultiplyPoint3x4(v));
+                b.Encapsulate(localToWorld.MultiplyPoint3x4(vertices[i]));
+            }
+
+            if (first)
+            {
+                newBounds = b;
+            }
+            else
+            {
+                newBounds.Encapsulate(b);
             }
         }
         
