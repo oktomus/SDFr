@@ -1,4 +1,3 @@
-using SDFr;
 using UnityEditor;
 using UnityEngine;
 
@@ -42,12 +41,6 @@ namespace SDFr.Editor
         protected override void OnDisable()
         {
             BoxBoundsHandle = null;
-            SDFBaker baker = target as SDFBaker;
-            if (baker == null) return;
-            if (!baker.IsPreviewing) //only destroy if not previewing
-            {
-                baker.EditorDestroyAVolume();
-            }
         }
         
         protected override void DrawVolumeGUI()
@@ -59,10 +52,7 @@ namespace SDFr.Editor
             
             //disable these when previewing to enforce idea that they are for baking
             EditorGUI.BeginDisabledGroup(baker.IsPreviewing);
-            //dimensions
-            EditorGUILayout.PropertyField(DimensionsProperty);
-            //bounds
-            EditorGUILayout.PropertyField(BoundsProperty);
+            DrawBaseGUI();
             //ray samples
             EditorGUILayout.PropertyField(raySamplesProperty);
             //fit to vertices of mesh, if false the bounds will be used, bounds may be larger than mesh and waste space

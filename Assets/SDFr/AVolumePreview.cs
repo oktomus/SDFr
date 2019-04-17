@@ -5,11 +5,36 @@ using Object = UnityEngine.Object;
 
 namespace SDFr
 {
-    public abstract class AVolumePreview<Tvolume,Tdata> : IDisposable 
-        where Tvolume : AVolume<Tvolume>, new()
+    public abstract class AVolumePreview<Tdata> : IDisposable 
         where Tdata : AVolumeData
-    {        
-        protected Tvolume _volume;
+    {
+        
+        public Matrix4x4 LocalToWorldNoScale
+        {
+            get
+            {
+                if ( _transform == null ) return Matrix4x4.identity;
+                return Matrix4x4.TRS(
+                    _transform.position + _data.bounds.center,
+                    _transform.rotation,
+                    Vector3.one);
+            }
+        }
+        
+        public Matrix4x4 LocalToWorld
+        {
+            get
+            {
+                if ( _transform == null ) return Matrix4x4.identity;
+                
+                return Matrix4x4.TRS(
+                    _transform.position + _data.bounds.center,
+                    _transform.rotation,
+                    _transform.localScale);
+            }
+        }
+        
+        protected Transform _transform;
         protected CommandBuffer _cmd;
         protected MaterialPropertyBlock _props;
         protected Material _material;
@@ -24,15 +49,15 @@ namespace SDFr
         /// <param name="data"></param>
         /// <param name="shader"></param>
         /// <param name="transform"></param>
-        public AVolumePreview( Tvolume volume, Tdata data, Shader shader )
+        public AVolumePreview( Tdata data, Shader shader, Transform transform )
         {
-            if (volume == null || data == null || shader == null)
+            if ( data == null || shader == null || transform == null )
             {
                 Dispose();
                 return;
             }
 
-            _volume = volume;
+            _transform = transform;
             _data = data;
             _cmd = new CommandBuffer {name = "["+_data.GetType()+"]" + _data.name};
             _props = new MaterialPropertyBlock();

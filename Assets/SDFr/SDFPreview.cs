@@ -1,11 +1,8 @@
-using System;
 using UnityEngine;
-using UnityEngine.Rendering;
-using Object = UnityEngine.Object;
 
 namespace SDFr
 {
-    public class SDFPreview : AVolumePreview<SDFVolume,SDFData>
+    public class SDFPreview : AVolumePreview<SDFData>
     {
         private bool _disposing;
         
@@ -19,7 +16,7 @@ namespace SDFr
 
         public Texture3D debugTex3D; //for viewing existing texture3D not baked with SDFr
         
-        public SDFPreview(SDFVolume aVolume, SDFData sdfData, Shader shader) : base(aVolume,sdfData,shader)
+        public SDFPreview(SDFData sdfData, Shader shader, Transform transform) : base(sdfData,shader,transform)
         {
         }
 
@@ -39,8 +36,8 @@ namespace SDFr
                 _props.SetTexture("_SDFVolumeTex",debugTex3D);
             }
             
-            _props.SetMatrix(_SDFVolumeLocalToWorld, _volume.LocalToWorldNoScale);
-            _props.SetMatrix(_SDFVolumeWorldToLocal, _volume.LocalToWorldNoScale.inverse);
+            _props.SetMatrix(_SDFVolumeLocalToWorld, LocalToWorldNoScale);
+            _props.SetMatrix(_SDFVolumeWorldToLocal, LocalToWorldNoScale.inverse);
             _props.SetFloat(_SDFVolumeFlip, flip ? -1f : 1f); 
             _props.SetVector(_BlitScaleBiasRt,new Vector4(1f,1f,0f,0f));
             _props.SetVector(_BlitScaleBias, new Vector4(1f, 1f, 0f, 0f));

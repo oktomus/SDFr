@@ -7,7 +7,6 @@ namespace SDFr
     [ExecuteInEditMode] //required for previewing
     public class SDFBaker : AVolumeBaker<SDFVolume,SDFData>
     {
-        
         [SerializeField] private int raySamples = 256;
         [SerializeField] private int jitterSeed = 555;
         [SerializeField] private float jitterScale = 0.75f;
@@ -17,27 +16,22 @@ namespace SDFr
         
         [SerializeField] private SDFData sdfData;
         [SerializeField] private Texture3D debugTex3D; //for viewing existing texture3D not baked with SDFr
-        
+
+        public override int MaxDimension => 256;
+
 #if UNITY_EDITOR
         
         private const string _sdfPreviewShaderName = "XRA/SDFr";
         private static Shader _shader; //TODO better way 
         
-        protected override void OnDrawGizmos()
-        {
-            if (aVolume == null || !IsPreviewing) return;
-
-            base.OnDrawGizmos();
-        }
-
-        public override AVolumePreview<SDFVolume, SDFData> CreatePreview()
+        public override AVolumePreview<SDFData> CreatePreview()
         {
             if (_shader == null)
             {
                 _shader = Shader.Find(_sdfPreviewShaderName);
             }
-
-            AVolumePreview<SDFVolume,SDFData> sdf = new SDFPreview(aVolume, sdfData, _shader);
+            
+            AVolumePreview<SDFData> sdf = new SDFPreview(sdfData, _shader, transform);
             if (debugTex3D != null)
             {
                 (sdf as SDFPreview).debugTex3D = debugTex3D;
@@ -73,26 +67,36 @@ namespace SDFr
                 bakedRenderers = new List<Renderer>();
             }
             bakedRenderers.Clear();
+                        
+            AVolumeSettings settings = new AVolumeSettings(bounds,dimensions);
             
             //first check if any objects are parented to this object
             //if anything is found, try to use renderers from those instead of volume overlap
-            if (!GetMeshRenderersInChildren(ref bakedRenderers))
+            if (!SDFBaker.GetMeshRenderersInChildren( ref settings, ref bakedRenderers, transform, fitToVertices))
             {
                 //otherwise try to get renderers intersecting the volume
                 //get mesh renderers within volume
-                if (!GetMeshRenderersIntersectingVolume(ref bakedRenderers))
+                if (!SDFBaker.GetMeshRenderersIntersectingVolume( settings, transform, ref bakedRenderers))
                 {
                     //TODO display error?
                     return;
                 }
             }
 
-            aVolume?.Bake( raySamples, bakedRenderers, BakeComplete );
+            SDFVolume sdfVolume = AVolume<SDFVolume>.CreateVolume(transform, settings);
+            
+            sdfVolume.Bake( raySamples, bakedRenderers, BakeComplete );
+            
+            sdfVolume.Dispose();
         }
         
         //TODO improve asset saving 
-        private void BakeComplete( float[] distances, float maxDistance, string path = "" )
+        private void BakeComplete( SDFVolume sdfVolume, float[] distances, float maxDistance, object passthrough )
         {
+            //update the bounds since they may have been adjusted during bake
+            bounds = sdfVolume.Settings.BoundsLocal;
+            
+            string path = "";
             if (sdfData != null)
             {
                 //use path of existing sdfData
@@ -115,14 +119,15 @@ namespace SDFr
             
             //create new SDFData
             sdfData = ScriptableObject.CreateInstance<SDFData>();
-            sdfData.bounds = aVolume.BoundsLocalAABB;
-            sdfData.voxelSize = aVolume.voxelSize;
+            sdfData.bounds = sdfVolume.Settings.BoundsLocal;
+            sdfData.voxelSize = sdfVolume.Settings.VoxelSize;
+            sdfData.dimensions = sdfVolume.Settings.Dimensions;
 
             float minAxis = Mathf.Min( sdfData.bounds.size.x, Mathf.Min( sdfData.bounds.size.y, sdfData.bounds.size.z ) );
             sdfData.nonUniformScale = new Vector3( sdfData.bounds.size.x/minAxis, sdfData.bounds.size.y/minAxis, sdfData.bounds.size.z/minAxis );
 
             Texture3D newTex = new Texture3D(
-                aVolume.Dimensions.x, aVolume.Dimensions.y, aVolume.Dimensions.z,
+                sdfVolume.Settings.Dimensions.x, sdfVolume.Settings.Dimensions.y, sdfVolume.Settings.Dimensions.z,
                 TextureFormat.RHalf, false);
 
             
@@ -171,14 +176,10 @@ namespace SDFr
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             
-            //TODO fix
-            
             if (IsPreviewing)
                 TogglePreview();
             if (!IsPreviewing ) 
                 TogglePreview();
-            HiddenRenderers = true;
-            ToggleBakedRenderers();
         }
 #endif
     }

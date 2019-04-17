@@ -7,59 +7,65 @@ namespace SDFr
         where T : AVolume<T>, new()
         where D : AVolumeData
     {
-        [SerializeField]
-        protected Bounds bounds;
-        [SerializeField]
-        protected Vector3Int dimensions = new Vector3Int(32,32,32);
-        [SerializeField] private bool fitToVertices = true;
-        [SerializeField] 
-        protected List<Renderer> bakedRenderers;
+        [SerializeField] protected Bounds bounds;
+        [SerializeField] protected Vector3Int dimensions = new Vector3Int(32,32,32);
+        [SerializeField] protected bool fitToVertices = true;
+        [SerializeField] protected List<Renderer> bakedRenderers;
+        [SerializeField] float targetVoxelSize;
+        [SerializeField] protected bool useTargetVoxelSize = false;
 
-        protected T aVolume;
-        
-        public bool HasAVolume => aVolume != null;
-
-        public abstract AVolumePreview<T, D> CreatePreview();
+        public abstract int MaxDimension { get; }
+        public abstract AVolumePreview<D> CreatePreview();
         
         public void TogglePreview()
         {
-            if (aVolume == null) return;
+            if ( !RenderersEnabled ) EnableRenderers( true );
             
             if (_aPreview == null)
             {
                 _aPreview = CreatePreview();
+                EnableRenderers( false );
             }
             else
             {
                 _aPreview?.Dispose();
                 _aPreview = null;
-                if (HiddenRenderers)
-                {
-                    HiddenRenderers = false;
-                    ToggleBakedRenderers();
-                }
+
+               EnableRenderers( true );
             }
         }
-        
-        public void ToggleBakedRenderers()
+
+        protected void EnableRenderers( bool visible )
         {
             if (bakedRenderers == null || bakedRenderers.Count == 0) return;
-            HiddenRenderers = !HiddenRenderers;
+            RenderersEnabled = visible;
             foreach (var r in bakedRenderers)
             {
-                if ( r.enabled != HiddenRenderers ) r.enabled = HiddenRenderers;
+                if (r == null) continue;
+                r.enabled = RenderersEnabled;
             }
         }
+
+        /// <summary>
+        /// changes bound size automatically
+        /// </summary>
+        public virtual void Encapsulate()
+        {
+            List<Renderer> tempRenderers = new List<Renderer>();
+            AVolumeSettings settings = new AVolumeSettings(bounds,dimensions);
+            GetMeshRenderersInChildren(ref settings, ref tempRenderers, transform, fitToVertices);
+            bounds = settings.BoundsLocal;
+        }
         
-        protected bool GetMeshRenderersInChildren(ref List<Renderer> renderers )
+        public static bool GetMeshRenderersInChildren( ref AVolumeSettings settings, ref List<Renderer> renderers, Transform target, bool fitToVertices )
         {
             if (renderers == null) return false;
             
             //get renderers in children
-            Renderer[] mrs = gameObject.GetComponentsInChildren<Renderer>();
+            Renderer[] mrs = target.GetComponentsInChildren<Renderer>();
             if (mrs == null || mrs.Length == 0) return false;
 
-            Bounds newBounds = new Bounds(transform.position,Vector3.zero);
+            Bounds newBounds = new Bounds(target.position,Vector3.zero);
             bool first = true;
             foreach (var r in mrs)
             {
@@ -91,7 +97,17 @@ namespace SDFr
 
                     if (mesh != null)
                     {
-                        EncapsulateVertices(ref newBounds, mesh, transform.worldToLocalMatrix * r.transform.localToWorldMatrix, first);
+                        Bounds b = EncapsulateVertices(mesh, r.transform.localToWorldMatrix);
+
+                        if (first)
+                        {
+                            newBounds = b;
+                        }
+                        else
+                        {
+                            newBounds.Encapsulate(b);
+                        }
+                        
                         first = false;
                     }
                 }
@@ -106,14 +122,15 @@ namespace SDFr
 
             //assign new bounds
             //remove the world offset            
-            newBounds = new Bounds(newBounds.center - transform.position, newBounds.size);
-            
-            bounds = aVolume.UpdateBounds(newBounds,true);
+            newBounds = new Bounds(newBounds.center - target.position, newBounds.size);
+
+            settings = new AVolumeSettings(newBounds,settings.Dimensions);
+            AVolumeSettings.AddBoundsBorder(ref settings);
 
             return true;
         }
         
-        protected bool GetMeshRenderersIntersectingVolume( ref List<Renderer> renderers )
+        public static bool GetMeshRenderersIntersectingVolume( AVolumeSettings settings, Transform transform, ref List<Renderer> renderers )
         {
             if (renderers == null) return false;
             
@@ -123,13 +140,17 @@ namespace SDFr
                 return false;
             }
 
+            //shift bounds local to world space position
+            Bounds ws = settings.BoundsLocal;
+            ws.center += transform.position;
+            
             foreach (var r in mrs)
             {             
                 if (!(r is MeshRenderer) && !(r is SkinnedMeshRenderer)) continue;
                 //skip inactive renderers
                 if (!r.gameObject.activeSelf) continue;
                 if (!r.enabled) continue;
-                if (!aVolume.BoundsWorldAABB.Intersects(r.bounds)) continue;
+                if (!ws.Intersects(r.bounds)) continue;
                 renderers.Add(r);
             }
 
@@ -141,7 +162,7 @@ namespace SDFr
             return true;
         }
 
-        protected void EncapsulateVertices(ref Bounds newBounds, Mesh mesh, Matrix4x4 localToWorld, bool first = false )
+        public static Bounds EncapsulateVertices( Mesh mesh, Matrix4x4 localToWorld )
         {
             Vector3[] vertices = new Vector3[mesh.vertexCount];
             mesh.vertices.CopyTo(vertices,0);
@@ -153,22 +174,15 @@ namespace SDFr
                 b.Encapsulate(localToWorld.MultiplyPoint3x4(vertices[i]));
             }
 
-            if (first)
-            {
-                newBounds = b;
-            }
-            else
-            {
-                newBounds.Encapsulate(b);
-            }
+            return b;
         }
         
 #if UNITY_EDITOR
         private static Color colorPreviewBounds = new Color(0.5f,1f,0.5f,0.5f);
     
-        protected AVolumePreview<T,D> _aPreview;
+        protected AVolumePreview<D> _aPreview;
         public bool IsPreviewing => _aPreview != null;
-        public bool HiddenRenderers { get; protected set; }
+        public bool RenderersEnabled { get; protected set; }
         
         private void OnValidate()
         {
@@ -177,41 +191,41 @@ namespace SDFr
             if (bounds.extents.y < float.Epsilon) bounds.extents = new Vector3(bounds.extents.x,float.Epsilon,bounds.extents.z);
             if (bounds.extents.z < float.Epsilon) bounds.extents = new Vector3(bounds.extents.x,bounds.extents.y,float.Epsilon);;
 
-            dimensions.x = Mathf.Clamp(dimensions.x, 1, 256);
-            dimensions.y = Mathf.Clamp(dimensions.y, 1, 256);
-            dimensions.z = Mathf.Clamp(dimensions.z, 1, 256);
-        }
-        
-        public virtual void EditorCreateAVolume()
-        {
-            EditorDestroyAVolume();
-
-            AVolumeSettings settings = new AVolumeSettings
+            if (useTargetVoxelSize)
             {
-                Bounds = bounds, Dimensions = dimensions
-            };
-        
-            //create new
-            aVolume = AVolume<T>.CreateVolume(transform,settings);
+                targetVoxelSize = Mathf.Max(float.Epsilon, targetVoxelSize);
+                
+                dimensions.x = Mathf.RoundToInt(bounds.size.x / targetVoxelSize);
+                dimensions.y = Mathf.RoundToInt(bounds.size.y / targetVoxelSize);
+                dimensions.z = Mathf.RoundToInt(bounds.size.z / targetVoxelSize);
+            }
+            
+            dimensions.x = Mathf.Clamp(dimensions.x, 1, MaxDimension);
+            dimensions.y = Mathf.Clamp(dimensions.y, 1, MaxDimension);
+            dimensions.z = Mathf.Clamp(dimensions.z, 1, MaxDimension);
         }
         
-        public virtual void EditorDestroyAVolume()
-        {
-            //cleanup existing
-            aVolume?.Dispose();
-        }
-
         public abstract void Bake();
 
         protected virtual void OnDrawGizmos()
         {
-            if (aVolume == null ) return;
-        
             //draw bounds to indicate preview
             //ignore scale of transform
-            Gizmos.matrix = Matrix4x4.TRS(aVolume.Transform.position, aVolume.Transform.rotation, Vector3.one);
+            var transform1 = transform;
+            Gizmos.matrix = Matrix4x4.TRS(transform1.position, transform1.rotation, Vector3.one);
             Gizmos.color = colorPreviewBounds;
-            Gizmos.DrawWireCube(aVolume.BoundsLocalAABB.center, aVolume.BoundsLocalAABB.size);
+            Gizmos.DrawWireCube(bounds.center, bounds.size);
+        }
+
+        private void OnDrawGizmosSelected()
+        {
+            //draw voxel size
+            var transform1 = transform;
+            Gizmos.matrix = Matrix4x4.TRS(transform1.position, transform1.rotation, Vector3.one);
+            Gizmos.color = Color.red;
+            Vector3 voxelSize = new Vector3( bounds.size.x/dimensions.x, bounds.size.y/dimensions.y, bounds.size.z/dimensions.z);
+            Bounds voxelBounds = new Bounds(bounds.center - bounds.extents + (voxelSize*0.5f), voxelSize);
+            Gizmos.DrawWireCube(voxelBounds.center, voxelBounds.size);
         }
 #endif
         

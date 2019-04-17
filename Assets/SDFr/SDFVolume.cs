@@ -44,27 +44,27 @@ namespace SDFr
         private const int LAYER_BACK_GEO = 5; //"UI" builtin
         private int LAYER_MASK_BACK = 1 << LAYER_BACK_GEO;
         
-        private Action<float[],float,string> onBakeComplete;
+        private Action<SDFVolume,float[],float,object> onBakeComplete;
         
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
 
             if (!disposing) return;
-            //dispose
+            onBakeComplete = null;
         }
         
-        public void Bake( int raySamples, List<Renderer> renderers, Action<float[],float,string> bakeComplete )
+        public void Bake( int raySamples, List<Renderer> renderers, Action<SDFVolume,float[],float,object> bakeComplete, object passthrough = null )
         {
             onBakeComplete = bakeComplete;
 
-            int progressInterval = _cellCount / 4;
+            int progressInterval = _settings.CellCount / 4;
             int progress = 0;
             
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            vec3 halfVoxel = _halfVoxel;
+            vec3 halfVoxel = _settings.HalfVoxel;
             float maxDistance = 0f;
 
             //adjusted to best timings from testing but it could vary by CPU
@@ -82,8 +82,8 @@ namespace SDFr
             CreateColliders( ref renderers, ref geoFront, ref geoBack );
             
             //prepare data
-            NativeArray<float> distances = new NativeArray<float>(_cellCount, Allocator.TempJob);
-            NativeArray<CellResults> allResults = new NativeArray<CellResults>(_cellCount,Allocator.TempJob);
+            NativeArray<float> distances = new NativeArray<float>(_settings.CellCount, Allocator.TempJob);
+            NativeArray<CellResults> allResults = new NativeArray<CellResults>(_settings.CellCount,Allocator.TempJob);
             
             //constant for all cells
             NativeArray<vec3> sphereSamples = new NativeArray<vec3>(raySamples, Allocator.TempJob);
@@ -134,14 +134,14 @@ namespace SDFr
             volumePlanes[5] = pfv;
 #endif
             //iterate each cell performing raycasted samples
-            for (int i = 0; i < _cellCount; i++)
+            for (int i = 0; i < _settings.CellCount; i++)
             {
                 if (i % progressInterval == 0)
                 {
-                    EditorUtility.DisplayProgressBar(strProgressTitle,strProgress,i/(float)_cellCount);
+                    EditorUtility.DisplayProgressBar(strProgressTitle,strProgress,i/(float)_settings.CellCount);
                 }
                 
-                vec3 positionWS = ToPositionWS(i);
+                vec3 positionWS = _settings.ToPositionWS(i,LocalToWorldNoScale);
                 vec3 centerVoxelWS = positionWS + halfVoxel;
                 
                 NativeArray<float> rayLengths = new NativeArray<float>(raySamples, Allocator.TempJob);
@@ -221,7 +221,7 @@ namespace SDFr
                 Results = allResults
             };
             
-            JobHandle compareDistancesHandle = compareDistances.Schedule(_cellCount,compareBatchCount);
+            JobHandle compareDistancesHandle = compareDistances.Schedule(_settings.CellCount,compareBatchCount);
             compareDistancesHandle.Complete();
             
             stopwatch.Stop();
@@ -229,7 +229,7 @@ namespace SDFr
 
             EditorUtility.ClearProgressBar();
                         
-            float[] distancesOut = new float[_cellCount];
+            float[] distancesOut = new float[_settings.CellCount];
             distances.CopyTo(distancesOut);
             
             //cleanup all the temp arrays
@@ -249,7 +249,7 @@ namespace SDFr
             }
             
             //NOTE do not use max distance, instead use aabbMagnitude so distance fields are interchangeable 
-            bakeComplete?.Invoke( distancesOut, aabbMagnitude, "" );
+            bakeComplete?.Invoke( this, distancesOut, aabbMagnitude, passthrough );
         }
         
 #if USE_BURST_AND_MATH

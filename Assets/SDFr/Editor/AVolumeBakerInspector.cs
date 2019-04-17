@@ -12,6 +12,8 @@ namespace SDFr.Editor
         //serialized properties
         protected SerializedProperty DimensionsProperty;
         protected SerializedProperty BoundsProperty;
+        protected SerializedProperty UseTargetVoxelSizeProperty;
+        protected SerializedProperty TargetVoxelSizeProperty;
 
         protected const string StrBake = "Bake";
         protected const string StrPreview = "Preview";
@@ -20,6 +22,9 @@ namespace SDFr.Editor
         protected const string StrShowRenderers = "Show Baked Renderers";
         protected const string StrPropDimensions = "dimensions";
         protected const string StrPropBounds = "bounds";
+        protected const string StrPropUseTargetVoxelSize = "useTargetVoxelSize";
+        protected const string StrPropTargetVoxelSize = "targetVoxelSize";
+        protected const string StrEncapsulate = "Encapsulate";
         
         [SerializeField] protected Color ColorHandles = new Color(0.5f,1f,1f,1f);
         [SerializeField] protected Color ColorWires = new Color(0.5f,1f,0.5f,1f);
@@ -31,6 +36,8 @@ namespace SDFr.Editor
             //collect serialized properties
             BoundsProperty = serializedObject.FindProperty(StrPropBounds);
             DimensionsProperty = serializedObject.FindProperty(StrPropDimensions);
+            UseTargetVoxelSizeProperty = serializedObject.FindProperty(StrPropUseTargetVoxelSize);
+            TargetVoxelSizeProperty = serializedObject.FindProperty(StrPropTargetVoxelSize);
         }
         
         protected virtual void OnEnable()
@@ -38,32 +45,13 @@ namespace SDFr.Editor
             if ( BoxBoundsHandle == null ) BoxBoundsHandle = new BoxBoundsHandle();
         
             CollectSerializedProperties();
-                
-            //create editor AVolume
-            T av = target as T;
-            if (av == null) return;
-            if (av.HasAVolume) return; 
-            av.EditorCreateAVolume();
         }
         
         protected virtual void OnDisable()
         {
             BoxBoundsHandle = null;
-            T av = target as T;
-            if (av == null) return;
-            av.EditorDestroyAVolume();
         }
-        
-        protected void RebuildAVolume()
-        {
-            T av = serializedObject.targetObject as T;
-            if (av == null) return;
-            //TODO should this update only the modified properties?
-            //in most cases if bounds/dims change the volume needs rebuilding anyway...
-            av.EditorDestroyAVolume();
-            av.EditorCreateAVolume();
-        }
-        
+                
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
@@ -72,16 +60,43 @@ namespace SDFr.Editor
             
             if (serializedObject.ApplyModifiedProperties())
             {
-                RebuildAVolume();
+                //no settings are used until re-baking
             }
         }
     
         protected virtual void DrawVolumeGUI()
         {
-            //dimensions
+            DrawBaseGUI();
+        }
+
+        protected void DrawBaseGUI()
+        {
+            EditorGUILayout.PropertyField(UseTargetVoxelSizeProperty);
+            bool useTargetVoxelSize = UseTargetVoxelSizeProperty.boolValue;
+            
+            if (useTargetVoxelSize)
+            {
+                //target voxel size (uniform)
+                EditorGUILayout.PropertyField(TargetVoxelSizeProperty);
+
+            }
+            //dimensions, if using target voxel size show dimensions as non editable
+            EditorGUI.BeginDisabledGroup(useTargetVoxelSize);
             EditorGUILayout.PropertyField(DimensionsProperty);
+            EditorGUI.EndDisabledGroup();
+
             //bounds
             EditorGUILayout.PropertyField(BoundsProperty);
+            
+            if (GUILayout.Button(StrEncapsulate))
+            {
+                T baker = target as T;
+                if (baker != null)
+                {
+                    baker.Encapsulate();
+                }
+            }
+            
         }
 
         protected virtual void BakeControls()
@@ -90,7 +105,6 @@ namespace SDFr.Editor
             if (baker == null) return;
             if (GUILayout.Button(StrBake))
             {
-                RebuildAVolume();
                 baker.Bake();
             }
     
@@ -98,14 +112,6 @@ namespace SDFr.Editor
             {
                 baker.TogglePreview();
                 SceneView.RepaintAll();
-            }
-
-            if (baker.IsPreviewing)
-            {
-                if (GUILayout.Button(baker.HiddenRenderers ? StrHideRenderers : StrShowRenderers))
-                {
-                    baker.ToggleBakedRenderers();
-                }
             }
         }
         
@@ -141,10 +147,19 @@ namespace SDFr.Editor
                 center = BoxBoundsHandle.center,
                 size = BoxBoundsHandle.size
             };
+                
+            //draw voxel size
+            Gizmos.color = Color.red;
+            Vector3 voxelSize = new Vector3( 
+                BoundsProperty.boundsValue.size.x/DimensionsProperty.vector3IntValue.x, 
+                BoundsProperty.boundsValue.size.y/DimensionsProperty.vector3IntValue.y, 
+                BoundsProperty.boundsValue.size.z/DimensionsProperty.vector3IntValue.z);
+            Bounds voxelBounds = new Bounds(BoundsProperty.boundsValue.center - BoundsProperty.boundsValue.extents + (voxelSize*0.5f), voxelSize);
+            Gizmos.DrawWireCube(voxelBounds.center, voxelBounds.size);
 
             if (serializedObject.ApplyModifiedProperties())
             {
-                RebuildAVolume();
+                //no settings applied until re-baking
             }
         }
     }
