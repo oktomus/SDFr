@@ -53,4 +53,22 @@ inline float DistanceFunctionTex3D( in float3 rayPosWS, in float3 rayOrigin, in 
     return distance(rayOrigin,rayEnd);
 }
 
+// Find the min distance to AABB
+inline float DistanceToAABB(in float3 rayOrigin, in float3 rayEnd, in SDFrVolumeData data)
+{
+	float4x4	w2l = data.WorldToLocal;
+	float3		extents = data.Extents;
+
+	//take ray to local space of bounds (now the bounds is axis-aligned relative to the ray)
+	float3 originLocal = mul(w2l, float4(rayOrigin, 1)).xyz;
+	float3 endLocal = mul(w2l, float4(rayEnd, 1)).xyz;
+
+	float2 intersection = LineAABBIntersect(originLocal, endLocal, -extents, extents);
+
+	if (intersection.x < intersection.y && intersection.x < 1)
+	{
+		return intersection.x * distance(rayOrigin, rayEnd);
+	}
+	return distance(rayOrigin, rayEnd);
+}
 #endif

@@ -1,5 +1,3 @@
-﻿using System.Collections;
-using System.Collections.Generic;
 using SDFr;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -43,8 +41,8 @@ public class RaymarchExample : MonoBehaviour
         _cmd = new CommandBuffer();
         _material = new Material(shader);
         _material.hideFlags = HideFlags.DontSave;
-        _volumesData = new VolumeData[2];
-        _volumes = new ComputeBuffer(2,VolumeDataStride);
+        _volumesData = new VolumeData[4];
+        _volumes = new ComputeBuffer(4,VolumeDataStride);
         _volumes.SetData(_volumesData);
     }
 
@@ -72,6 +70,15 @@ public class RaymarchExample : MonoBehaviour
         _volumesData[1].WorldToLocal = volumeBTransform.worldToLocalMatrix;
         _volumesData[1].Extents = volumeB.bounds.extents;
         
+		// Note: Assuming sphere and box are children!
+		// If using single game object then scale is applied to bounds and localmatrix maning its applied twice in shader!
+		// Sphere
+		_volumesData[2].WorldToLocal = sphere.worldToLocalMatrix;
+        _volumesData[2].Extents = sphere.GetChild(0).GetComponent<MeshRenderer>().bounds.extents;
+        // Box
+        _volumesData[3].WorldToLocal = box.worldToLocalMatrix;
+        _volumesData[3].Extents = box.GetChild(0).GetComponent<MeshRenderer>().bounds.extents;
+
         _volumes.SetData(_volumesData);
         
  

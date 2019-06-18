@@ -59,6 +59,20 @@ Shader "Custom/RaymarchExample"
                 return d;
             }
             
+			// Calculate the furthest safe ray start distance based on bounds of each element.
+			float FurthestRayStartDistance(float3 rayOrigin, float3 rayEnd)
+			{
+				float d0 = DistanceToAABB(rayOrigin, rayEnd, _VolumeBuffer[0]);
+				float d1 = DistanceToAABB(rayOrigin, rayEnd, _VolumeBuffer[1]);
+				float d2 = DistanceToAABB(rayOrigin, rayEnd, _VolumeBuffer[2]);
+				float d3 = DistanceToAABB(rayOrigin, rayEnd, _VolumeBuffer[3]);
+
+				float d = min(d0, d1);
+				d = min(d2, d);
+				d = min(d3, d);
+				return d;
+			}
+
             half4 frag (Varyings_Proc input) : SV_Target
             {
                 //ray origin
@@ -67,7 +81,9 @@ Shader "Custom/RaymarchExample"
                 float3 rd = -normalize(mul(float3(input.positionCS.xy, 1.0), (float3x3)_PixelCoordToViewDirWS));                
                 float3 re = ro + rd * _ProjectionParams.z;
             
-                float dist = 0;
+				// Set starting distance to furthest safe distance to closest AABB ( originally was 0 ).
+				// Otherwise number of steps is much higher as step size is based on first distance found within AABB to SDF.
+				float dist = FurthestRayStartDistance(ro, re);
                 
                 for( int s=0; s<MAX_STEPS; s++)
                 {
@@ -77,6 +93,11 @@ Shader "Custom/RaymarchExample"
                     
                     if ( d < EPSILON )
                     {
+						// Debugging: Distance.
+						// return half4(0, 0, dist / 10.0, 1);
+						// Debugging: Simple Intensity mapping of number of steps.
+						return half4(s / (float)MAX_STEPS, 0, 0, 1);
+
                         //fast normal
                         float3 nx = rayPos + float3(NORMAL_DELTA,0,0);
                         float3 ny = rayPos + float3(0,NORMAL_DELTA,0);

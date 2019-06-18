@@ -12,3 +12,4 @@ Desktop.ini
 *.sln
 *.csproj
 *.user
+/.vs/
