@@ -11,6 +11,9 @@ Shader "Custom/RaymarchExample"
         Pass
         {
             CGPROGRAM
+			// TODO: In 2019 - change to shader_feature_local 
+			#pragma shader_feature _ SDFr_VISUALIZE_STEPS SDFr_VISUALIZE_HEATMAP SDFr_VISUALIZE_DIST
+
             #pragma vertex vert_proc_quad
             #pragma fragment frag
             
@@ -18,6 +21,7 @@ Shader "Custom/RaymarchExample"
             
             #include "Assets/SDFr/Shaders/SDFrProcedural.hlsl"
             #include "Assets/SDFr/Shaders/SDFrVolumeTex.hlsl"
+			#include "Assets/SDFr/Shaders/SDFrUtilities.hlsl"
 
             #define MAX_STEPS 512
             #define EPSILON 0.003
@@ -42,7 +46,10 @@ Shader "Custom/RaymarchExample"
               float3 d = abs(p) - b;
               return min(max(d.x,max(d.y,d.z)),0.0) + length(max(d,0.0));
             }
-                        
+             
+			// ISSUE: When stepping through a volume and not intersecting, it seams to keep a low step size.
+			// Probably cos closest intersect is previous AABB?
+			// Should maybe have an encompassing bounding box for scene - so if we hit that we early out!!!!
             float DistanceFunction( float3 rayPos, float3 rayOrigin, float3 rayEnd )
             {
                 float sphere = sdSphere(rayPos-_Sphere.xyz,_Sphere.w);
@@ -84,8 +91,10 @@ Shader "Custom/RaymarchExample"
 				// Set starting distance to furthest safe distance to closest AABB ( originally was 0 ).
 				// Otherwise number of steps is much higher as step size is based on first distance found within AABB to SDF.
 				float dist = FurthestRayStartDistance(ro, re);
-                
-                for( int s=0; s<MAX_STEPS; s++)
+				int steps = 0;
+
+				// Need to exit if max dist obtained elese empty pixels will use MAX_STEPS for nothing!
+				while ( steps < MAX_STEPS && dist < _ProjectionParams.z )
                 {
                     float3 rayPos = ro + rd * dist;
                                         
@@ -93,10 +102,21 @@ Shader "Custom/RaymarchExample"
                     
                     if ( d < EPSILON )
                     {
-						// Debugging: Distance.
-						// return half4(0, 0, dist / 10.0, 1);
-						// Debugging: Simple Intensity mapping of number of steps.
-						return half4(s / (float)MAX_STEPS, 0, 0, 1);
+#ifdef SDFr_VISUALIZE_DIST
+						return half4(0, 0, dist / 10.0, 1);
+#endif
+
+#ifdef SDFr_VISUALIZE_STEPS
+						return half4(steps / (float)MAX_STEPS, 0, 0, 1);
+#endif
+
+#ifdef SDFr_VISUALIZE_HEATMAP
+						// HeatMap - Green = minimal, Red = maximum number of steps
+						float	stepf = steps / (float)MAX_STEPS;
+						float	hue = lerp(0.33, 0.0, stepf);
+						float3	rgb = HsvToRgb(float3(hue, 1, 1));
+						return	half4(rgb, 1);
+#endif
 
                         //fast normal
                         float3 nx = rayPos + float3(NORMAL_DELTA,0,0);
@@ -112,9 +132,24 @@ Shader "Custom/RaymarchExample"
                         return half4(normalWS,1);
                     }
                     dist += d;
+					steps++;
                 }
-                
-                return half4(0.2,0.2,0.2,1);
+
+#ifdef SDFr_VISUALIZE_DIST
+				return half4(0, 0, dist / 10.0, 1);
+#endif
+
+#ifdef SDFr_VISUALIZE_STEPS
+				return half4(steps / (float)MAX_STEPS, 0, 0, 1);
+#endif
+#ifdef SDFr_VISUALIZE_HEATMAP
+				// HeatMap - Green = minimal, Red = maximum number of steps
+				float	stepf = steps / (float)MAX_STEPS;
+				float	hue = lerp(0.33, 0.0, stepf);
+				float3	rgb = HsvToRgb(float3(hue, 1, 1));
+				return	half4(rgb, 1);
+#endif
+				return half4(0.2,0.2,0.2,1);
             }
             ENDCG
         }

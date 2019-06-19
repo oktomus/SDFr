@@ -16,7 +16,8 @@ Shader "XRA/SDFr"
     
     #include "SDFrProcedural.hlsl"
     #include "SDFrVolumeTex.hlsl"
-    
+	#include "SDFrUtilities.hlsl"
+
     uniform float4x4 _PixelCoordToViewDirWS;
     
     Texture2D _BlueNoiseRGBA;
@@ -37,20 +38,6 @@ Shader "XRA/SDFr"
         return _BlueNoiseRGBA.SampleLevel( sampler_point_repeat_BlueNoiseRGBA, screenCoords, 0 );
     }
     
-    float3 HsvToRgb(float3 c)
-    {
-        const float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-        float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-        return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
-    }
-    
-    float map(float value, float istart, float istop, float ostart, float ostop)
-    {
-        float perc = (value - istart) / (istop - istart);
-        value = perc * (ostop-ostart) + ostart;
-        return value;
-    }
-    
     ENDHLSL
 	
 	SubShader
@@ -69,11 +56,12 @@ Shader "XRA/SDFr"
             Cull front
                         
             HLSLPROGRAM 
+			// TODO: In 2019 - change to shader_feature_local 
+			#pragma shader_feature _ SDFr_VISUALIZE_STEPS SDFr_VISUALIZE_HEATMAP SDFr_VISUALIZE_DIST
+
             #pragma vertex vert_proc_quad
             #pragma fragment Frag
-
-            #pragma shader_feature SDFr_VISUALIZE_STEPS
-
+		
             #define MAX_STEPS 1024
             #define EPSILON 0.003
             #define NORMAL_DELTA 0.03
@@ -147,10 +135,10 @@ Shader "XRA/SDFr"
                     //accumulate distance samples
                     float dist = 0; 
                     //accumulate the steps
-                    half s = 0;
+                    int steps = 0;
                     
                     UNITY_LOOP
-                    while( dist < distanceInVolume )
+                    while( dist < distanceInVolume && steps < MAX_STEPS )
                     {
                         //current position of ray
                         //since it is in local space always use the intersection enter position
@@ -186,24 +174,26 @@ Shader "XRA/SDFr"
                             float4 ndc = mul(UNITY_MATRIX_MVP,float4(rayHitWS,1));
                             float realDepth = ndc.z/ndc.w;                   
                             o.depth = realDepth;
-                            
-                            #ifdef SDFr_VISUALIZE_STEPS
-                            //brighter = more steps = more expensive
-                            const float mn = 100/360.0;
-                            const float mx = 1;
-                            float stepf = s/MAX_STEPS;
-                            float rv = map( stepf, 0.0, 1.0, mn, mx );
-                            float3 hue = HsvToRgb( float3( rv, 1, 1 ) );
-                            //o.color = half4(hue,1);
-                            o.color = stepf;
-                            #else
-                            //visualize world normals 
-                            o.color = half4(normalWS*0.5+0.5,1);
-                            #endif
+
+#ifdef SDFr_VISUALIZE_DIST
+							o.color = half4(0, 0, dist / 10.0, 1);
+#elif SDFr_VISUALIZE_STEPS
+							o.color = half4(steps / (float)MAX_STEPS, 0, 0, 1);
+#elif SDFr_VISUALIZE_HEATMAP
+							// HeatMap - Green = minimal, Red = maximum number of steps
+							float	stepf = steps / (float)MAX_STEPS;
+							float	hue = lerp(0.33, 0.0, stepf);
+							float3	rgb = HsvToRgb(float3(hue, 1, 1));
+							o.color = half4(rgb, 1);
+#else
+							//visualize world normals 
+							o.color = half4(normalWS*0.5 + 0.5, 1);
+#endif
+
                             return o;
                         }
                         dist += d;
-                        s += 1.0;
+						steps++;
                     }
                 }
                 //else did not intersect volume, discard 

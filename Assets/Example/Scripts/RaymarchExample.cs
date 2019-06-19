@@ -6,7 +6,8 @@ using UnityEngine.Rendering;
 public class RaymarchExample : MonoBehaviour
 {
     public Shader shader;
-    
+    public Visualisation visualisation = Visualisation.Normal;
+
     public SDFData volumeA;
     public Transform volumeATransform;
     
@@ -44,6 +45,7 @@ public class RaymarchExample : MonoBehaviour
         _volumesData = new VolumeData[4];
         _volumes = new ComputeBuffer(4,VolumeDataStride);
         _volumes.SetData(_volumesData);
+		OnSetKeywords();
     }
 
     private void OnDisable()
@@ -57,7 +59,27 @@ public class RaymarchExample : MonoBehaviour
         _volumes?.Dispose();
     }
 
-    void OnPostRender()
+	void OnSetKeywords()
+	{
+		Shader.DisableKeyword("SDFr_VISUALIZE_STEPS");
+		Shader.DisableKeyword("SDFr_VISUALIZE_HEATMAP");
+		Shader.DisableKeyword("SDFr_VISUALIZE_DIST");
+
+		switch( visualisation )
+		{
+			case Visualisation.IntensitySteps:  Shader.EnableKeyword("SDFr_VISUALIZE_STEPS"); break;
+			case Visualisation.HeatmapSteps:	Shader.EnableKeyword("SDFr_VISUALIZE_HEATMAP"); break;
+			case Visualisation.Distance:		Shader.EnableKeyword("SDFr_VISUALIZE_DIST"); break;
+		}
+	}
+
+	// Editor call Only
+	private void OnValidate()
+	{
+		OnSetKeywords();
+	}
+
+	void OnPostRender()
     {
         if (!CheckResources()) return;
         Camera cam = Camera.main;
@@ -69,7 +91,7 @@ public class RaymarchExample : MonoBehaviour
         
         _volumesData[1].WorldToLocal = volumeBTransform.worldToLocalMatrix;
         _volumesData[1].Extents = volumeB.bounds.extents;
-        
+
 		// Note: Assuming sphere and box are children!
 		// If using single game object then scale is applied to bounds and localmatrix maning its applied twice in shader!
 		// Sphere

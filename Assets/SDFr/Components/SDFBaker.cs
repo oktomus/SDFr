@@ -4,6 +4,8 @@ using UnityEngine;
 
 namespace SDFr
 {
+	public enum Visualisation {  Normal, IntensitySteps, HeatmapSteps, Distance }
+
     [ExecuteInEditMode] //required for previewing
     public class SDFBaker : AVolumeBaker<SDFVolume,SDFData>
     {
@@ -13,7 +15,8 @@ namespace SDFr
         [SerializeField] private bool sdfFlip; //invert sign of preview
         [SerializeField] private float previewEpsilon = 0.003f;
         [SerializeField] private float previewNormalDelta = 0.03f;
-        
+        [SerializeField] private Visualisation previewMode = Visualisation.Normal;
+
         [SerializeField] private SDFData sdfData;
         [SerializeField] private Texture3D debugTex3D; //for viewing existing texture3D not baked with SDFr
 
