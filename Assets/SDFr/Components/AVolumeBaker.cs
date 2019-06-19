@@ -15,9 +15,12 @@ namespace SDFr
         [SerializeField] protected bool useTargetVoxelSize = false;
 
         public abstract int MaxDimension { get; }
+
+#if UNITY_EDITOR
         public abstract AVolumePreview<D> CreatePreview();
-        
-        public void TogglePreview()
+
+
+		public void TogglePreview()
         {
             if ( !RenderersEnabled ) EnableRenderers( true );
             
@@ -177,7 +180,6 @@ namespace SDFr
             return b;
         }
         
-#if UNITY_EDITOR
         private static Color colorPreviewBounds = new Color(0.5f,1f,0.5f,0.5f);
     
         protected AVolumePreview<D> _aPreview;

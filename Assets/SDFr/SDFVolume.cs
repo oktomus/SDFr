@@ -136,12 +136,14 @@ namespace SDFr
             //iterate each cell performing raycasted samples
             for (int i = 0; i < _settings.CellCount; i++)
             {
-                if (i % progressInterval == 0)
+#if UNITY_EDITOR
+				if (i % progressInterval == 0)
                 {
                     EditorUtility.DisplayProgressBar(strProgressTitle,strProgress,i/(float)_settings.CellCount);
                 }
-                
-                vec3 positionWS = _settings.ToPositionWS(i,LocalToWorldNoScale);
+#endif
+
+				vec3 positionWS = _settings.ToPositionWS(i,LocalToWorldNoScale);
                 vec3 centerVoxelWS = positionWS + halfVoxel;
                 
                 NativeArray<float> rayLengths = new NativeArray<float>(raySamples, Allocator.TempJob);
@@ -226,10 +228,10 @@ namespace SDFr
             
             stopwatch.Stop();
             Debug.Log("SDF bake completed in "+stopwatch.Elapsed.ToString("mm\\:ss\\.ff"));
-
-            EditorUtility.ClearProgressBar();
-                        
-            float[] distancesOut = new float[_settings.CellCount];
+#if UNITY_EDITOR
+			EditorUtility.ClearProgressBar();
+#endif
+			float[] distancesOut = new float[_settings.CellCount];
             distances.CopyTo(distancesOut);
             
             //cleanup all the temp arrays
