@@ -73,22 +73,39 @@ Shader "XRA/SDFr"
             float _SDFVolumeFlip;
             float _SDFPreviewEpsilon = EPSILON;
             float _SDFPreviewNormalDelta = NORMAL_DELTA;
-                                                
-            float DistanceFunction( float3 rayPosLS )
-            {
-                float3 vp = rayPosLS;
-                vp += 0.5;
-                
-                float sample = _SDFVolumeTex.SampleLevel( sdfr_sampler_linear_clamp, vp, 0 ).r;                
-                
-                if ( _SDFVolumeFlip < 0 )
-                {
-                    sample = -sample;
-                }
-                
-                return sample;
-            }
-                        
+
+			inline float DistanceFunction(float3 rayPosLS)
+			{
+				float3 vp = rayPosLS + 0.5;
+
+				// Testing filtering and mip levels
+				float sample = _SDFVolumeTex.SampleLevel(sdfr_sampler_linear_clamp, vp, 0).r;
+				// float sample = _SDFVolumeTex.SampleLevel(sdfr_sampler_trilinear_clamp, vp, 0).r;
+				// float sample = _SDFVolumeTex.Sample(sdfr_sampler_trilinear_clamp, vp).r;
+				// if (_SDFVolumeFlip < 0) sample = -sample;
+				return (_SDFVolumeFlip < 0) ? -sample : sample;
+			}
+
+			// Should normalDeltas be cached?
+			inline float3 GenerateNormalsFast(float normalDelta, float dist, float3 rayPosLS)
+			{
+				float3 nx = rayPosLS + float3(normalDelta, 0, 0);
+				float3 ny = rayPosLS + float3(0, normalDelta, 0);
+				float3 nz = rayPosLS + float3(0, 0, normalDelta);
+				float dx = DistanceFunction(nx) - dist;
+				float dy = DistanceFunction(ny) - dist;
+				float dz = DistanceFunction(nz) - dist;
+				return normalize(float3(dx, dy, dz));
+			}
+
+			inline float3 GenerateNormals(float normalDelta, float dist, float3 rayPosLS)
+			{
+				float dx = DistanceFunction(rayPosLS + float3(normalDelta, 0, 0)) - DistanceFunction(rayPosLS - float3(normalDelta, 0, 0));
+				float dy = DistanceFunction(rayPosLS + float3(0, normalDelta, 0)) - DistanceFunction(rayPosLS - float3(0, normalDelta, 0));
+				float dz = DistanceFunction(rayPosLS + float3(0, 0, normalDelta)) - DistanceFunction(rayPosLS - float3(0, 0, normalDelta));
+				return normalize(float3(dx, dy, dz));
+			}
+
             struct OutputPS
             {
                 half4 color : COLOR0;
@@ -150,30 +167,31 @@ Shader "XRA/SDFr"
                         //the ray position at current step
                         //normalize into volume texture space 
                         rayPosLS /= _SDFVolumeExtents.xyz*2;
-                        float d = DistanceFunction(rayPosLS);
+						float d = DistanceFunction(rayPosLS);
                         
                         UNITY_BRANCH
                         if ( d < eps )
                         {
-                            //fast normal
-                            float3 nx = rayPosLS + float3(normalDelta,0,0);
-                            float3 ny = rayPosLS + float3(0,normalDelta,0);
-                            float3 nz = rayPosLS + float3(0,0,normalDelta);
-                            float dx = DistanceFunction(nx)-d;
-                            float dy = DistanceFunction(ny)-d;
-                            float dz = DistanceFunction(nz)-d;
-                            float3 normalLS = normalize(float3(dx,dy,dz));
-                            
+						//	float3 normalLS = GenerateNormalsFast(normalDelta, d, rayPosLS);
+							float3 normalLS = GenerateNormals(normalDelta * 0.5, d, rayPosLS);
+
                             //object to world space normals 
                             float3 normalWS = mul((float3x3)_SDFVolumeLocalToWorld,normalLS);
                             
                             //local to world ray hit position
                             float3 rayHitWS = mul(_SDFVolumeLocalToWorld,float4(rayPosLS,1)).xyz;
                             
+							// BUG: Depth value appears incorrect in preview mode - it intersects with geometry when it shouldn't.
+						
                             //NOTE only needed for depth if mixing with depth buffer
-                            float4 ndc = mul(UNITY_MATRIX_MVP,float4(rayHitWS,1));
+                            // float4 ndc = UnityObjectToClipPos(float4(rayHitWS, 1)); 
+							float4 ndc = mul(UNITY_MATRIX_MVP,float4(rayHitWS,1));
+						//	float4 ndc = mul(UNITY_MATRIX_VP, float4(rayHitWS, 1));
                             float realDepth = ndc.z/ndc.w;                   
                             o.depth = realDepth;
+							
+						//	float4 clippos = mul(UNITY_MATRIX_IT_MV, float4(rayHitWS, 1.0));
+						//	o.depth = clippos.z;
 
 #ifdef SDFr_VISUALIZE_DIST
 							o.color = half4(0, 0, dist / 10.0, 1);

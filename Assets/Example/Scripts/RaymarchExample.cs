@@ -93,7 +93,7 @@ public class RaymarchExample : MonoBehaviour
         _volumesData[1].Extents = volumeB.bounds.extents;
 
 		// Note: Assuming sphere and box are children!
-		// If using single game object then scale is applied to bounds and localmatrix maning its applied twice in shader!
+		// If using single game object then scale is applied to bounds and localmatrix meaning its applied twice in shader!
 		// Sphere
 		_volumesData[2].WorldToLocal = sphere.worldToLocalMatrix;
         _volumesData[2].Extents = sphere.GetChild(0).GetComponent<MeshRenderer>().bounds.extents;

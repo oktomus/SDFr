@@ -79,28 +79,15 @@ namespace SDFr.Editor
 
             //inverse sign of SDF preview
             EditorGUILayout.PropertyField(sdfFlipProperty);
-         /*   
-            //toggle world space normals & steps 
-            if (GUILayout.Button("Toggle Shading"))
-            {
-                if (Shader.IsKeywordEnabled("SDFr_VISUALIZE_STEPS"))
-                {
-                    Shader.DisableKeyword("SDFr_VISUALIZE_STEPS");
-                }
-                else
-                {
-                    Shader.EnableKeyword("SDFr_VISUALIZE_STEPS");
-                }
-                SceneView.RepaintAll();
-            }
-            */
 
             EditorGUI.EndDisabledGroup();
             
             //TODO if SDF Data assigned via drag & drop, adjust the bounds and settings to match SDF data
             EditorGUILayout.PropertyField(sdfDataProperty);
-
+			
             BakeControls();
+			if (GUILayout.Button("BakeHalfSize")) baker.BakeHalfSizeTest();
+			if (GUILayout.Button("Log Volume Data")) baker.LogDistances();
         }
 
 		void SetKeywords( Visualisation mode )

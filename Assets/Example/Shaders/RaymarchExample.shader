@@ -65,7 +65,22 @@ Shader "Custom/RaymarchExample"
                 
                 return d;
             }
-            
+			// Does no boundss checking - so assuming we hit something - but still checking against all primitives
+			float DistanceFunctionFast(float3 rayPos)
+			{
+				float sphere = sdSphere(rayPos - _Sphere.xyz, _Sphere.w);
+				float box = sdBox(rayPos - _Box.xyz, float3(1, 1, 1)*_Box.w);
+
+				float d = min(box, sphere);
+
+				float ad = DistanceFunctionTex3DFast(rayPos, _VolumeBuffer[0], _VolumeATex);
+				d = min(ad, d);
+
+				float bd = DistanceFunctionTex3DFast(rayPos, _VolumeBuffer[1], _VolumeBTex);
+				d = min(bd, d);
+				return d;
+			}
+
 			// Calculate the furthest safe ray start distance based on bounds of each element.
 			float FurthestRayStartDistance(float3 rayOrigin, float3 rayEnd)
 			{
@@ -122,9 +137,23 @@ Shader "Custom/RaymarchExample"
                         float3 nx = rayPos + float3(NORMAL_DELTA,0,0);
                         float3 ny = rayPos + float3(0,NORMAL_DELTA,0);
                         float3 nz = rayPos + float3(0,0,NORMAL_DELTA);
-                        float dx = DistanceFunction(nx,ro,re)-d;
-                        float dy = DistanceFunction(ny,ro,re)-d;
-                        float dz = DistanceFunction(nz,ro,re)-d;
+
+						// Can we not assume that any grad function is going to hit bounds and thus use a simpler method call?
+/*
+						float dx = DistanceFunction(nx,ro,re)-d;
+						float dy = DistanceFunction(ny,ro,re)-d;
+						float dz = DistanceFunction(nz,ro,re)-d;
+*/
+/*
+						float dx = DistanceFunctionFast(nx) - d;
+						float dy = DistanceFunctionFast(ny) - d;
+						float dz = DistanceFunctionFast(nz) - d;
+*/
+						float halfDelta = NORMAL_DELTA * 0.5;
+						float dx = DistanceFunctionFast(rayPos + float3(halfDelta, 0, 0)) - DistanceFunctionFast(rayPos - float3(halfDelta, 0, 0));
+						float dy = DistanceFunctionFast(rayPos + float3(0, halfDelta, 0)) - DistanceFunctionFast(rayPos - float3(0, halfDelta, 0));
+						float dz = DistanceFunctionFast(rayPos + float3(0, 0, halfDelta)) - DistanceFunctionFast(rayPos - float3(0, 0, halfDelta));
+
                         float3 normalWS = normalize(float3(dx,dy,dz));
                     
                         //TODO lighting 
