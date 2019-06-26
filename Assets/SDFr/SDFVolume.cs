@@ -17,15 +17,16 @@ using Object = UnityEngine.Object;
 
 #if USE_BURST_AND_MATH
 using Unity.Mathematics;
-using Random = Unity.Mathematics.Random;
 using Unity.Burst;
-
-using vec3 = Unity.Mathematics.float3;
-using vec4 = Unity.Mathematics.float4;
+// Aliases
+using Random	= Unity.Mathematics.Random;
+using vec3		= Unity.Mathematics.float3;
+using vec4		= Unity.Mathematics.float4;
 #else
-using Random = UnityEngine.Random;
-using vec3 = UnityEngine.Vector3;
-using vec4 = UnityEngine.Vector4;
+// Aliases
+using Random	= UnityEngine.Random;
+using vec3		= UnityEngine.Vector3;
+using vec4		= UnityEngine.Vector4;
 #endif
 
 namespace SDFr
@@ -105,43 +106,25 @@ namespace SDFr
             Plane pu = new Plane(Vector3.down,aabbMax);
             Plane pb = new Plane(Vector3.forward,aabbMin); 
             Plane pf = new Plane(Vector3.back,aabbMax);
-            
-#if USE_BURST_AND_MATH
-            volumePlanes[0] = new float4(pl.normal,pl.distance);
-            volumePlanes[1] = new float4(pr.normal,pr.distance);
-            volumePlanes[2] = new float4(pd.normal,pd.distance);
-            volumePlanes[3] = new float4(pu.normal,pu.distance);
-            volumePlanes[4] = new float4(pb.normal,pb.distance);
-            volumePlanes[5] = new float4(pf.normal,pf.distance);
-#else
-            vec4 plv = pl.normal;
-            plv.w = pl.distance;
-            vec4 prv = pr.normal;
-            prv.w = pr.distance;
-            vec4 pdv = pd.normal;
-            pdv.w = pd.distance;
-            vec4 puv = pu.normal;
-            puv.w = pu.distance;
-            vec4 pbv = pb.normal;
-            pbv.w = pb.distance;
-            vec4 pfv = pf.normal;
-            pfv.w = pf.distance;
-            volumePlanes[0] = plv;
-            volumePlanes[1] = prv;
-            volumePlanes[2] = pdv;
-            volumePlanes[3] = puv;
-            volumePlanes[4] = pbv;
-            volumePlanes[5] = pfv;
-#endif
+
+			volumePlanes[0] = new vec4( pl.normal.x, pl.normal.y, pl.normal.z, pl.distance);
+            volumePlanes[1] = new vec4( pr.normal.x, pr.normal.y, pr.normal.z, pr.distance);
+            volumePlanes[2] = new vec4( pd.normal.x, pd.normal.y, pd.normal.z, pd.distance);
+            volumePlanes[3] = new vec4( pu.normal.x, pu.normal.y, pu.normal.z, pu.distance);
+            volumePlanes[4] = new vec4( pb.normal.x, pb.normal.y, pb.normal.z, pb.distance);
+            volumePlanes[5] = new vec4( pf.normal.x, pf.normal.y, pf.normal.z, pf.distance);
+
             //iterate each cell performing raycasted samples
             for (int i = 0; i < _settings.CellCount; i++)
             {
-                if (i % progressInterval == 0)
+#if UNITY_EDITOR
+				if (i % progressInterval == 0)
                 {
                     EditorUtility.DisplayProgressBar(strProgressTitle,strProgress,i/(float)_settings.CellCount);
                 }
-                
-                vec3 positionWS = _settings.ToPositionWS(i,LocalToWorldNoScale);
+#endif
+
+				vec3 positionWS = _settings.ToPositionWS(i,LocalToWorldNoScale);
                 vec3 centerVoxelWS = positionWS + halfVoxel;
                 
                 NativeArray<float> rayLengths = new NativeArray<float>(raySamples, Allocator.TempJob);
@@ -226,10 +209,10 @@ namespace SDFr
             
             stopwatch.Stop();
             Debug.Log("SDF bake completed in "+stopwatch.Elapsed.ToString("mm\\:ss\\.ff"));
-
-            EditorUtility.ClearProgressBar();
-                        
-            float[] distancesOut = new float[_settings.CellCount];
+#if UNITY_EDITOR
+			EditorUtility.ClearProgressBar();
+#endif
+			float[] distancesOut = new float[_settings.CellCount];
             distances.CopyTo(distancesOut);
             
             //cleanup all the temp arrays

@@ -12,9 +12,10 @@ namespace SDFr.Editor
         //serialized properties
         protected SerializedProperty DimensionsProperty;
         protected SerializedProperty BoundsProperty;
-        protected SerializedProperty UseTargetVoxelSizeProperty;
+        protected SerializedProperty UseTargetVoxelSizeProperty;		
+		protected SerializedProperty useStandardBorderProperty;
         protected SerializedProperty TargetVoxelSizeProperty;
-
+		
         protected const string StrBake = "Bake";
         protected const string StrPreview = "Preview";
         protected const string StrEndPreview = "End Preview";
@@ -24,8 +25,9 @@ namespace SDFr.Editor
         protected const string StrPropBounds = "bounds";
         protected const string StrPropUseTargetVoxelSize = "useTargetVoxelSize";
         protected const string StrPropTargetVoxelSize = "targetVoxelSize";
-        protected const string StrEncapsulate = "Encapsulate";
-        
+        protected const string StrEncapsulate = "Encapsulate";        
+		protected const string strPropStandardBorder = "useStandardBorder";
+
         [SerializeField] protected Color ColorHandles = new Color(0.5f,1f,1f,1f);
         [SerializeField] protected Color ColorWires = new Color(0.5f,1f,0.5f,1f);
         
@@ -37,6 +39,7 @@ namespace SDFr.Editor
             BoundsProperty = serializedObject.FindProperty(StrPropBounds);
             DimensionsProperty = serializedObject.FindProperty(StrPropDimensions);
             UseTargetVoxelSizeProperty = serializedObject.FindProperty(StrPropUseTargetVoxelSize);
+			useStandardBorderProperty = serializedObject.FindProperty(strPropStandardBorder);
             TargetVoxelSizeProperty = serializedObject.FindProperty(StrPropTargetVoxelSize);
         }
         
@@ -74,12 +77,11 @@ namespace SDFr.Editor
             EditorGUILayout.PropertyField(UseTargetVoxelSizeProperty);
             bool useTargetVoxelSize = UseTargetVoxelSizeProperty.boolValue;
             
-            if (useTargetVoxelSize)
-            {
-                //target voxel size (uniform)
-                EditorGUILayout.PropertyField(TargetVoxelSizeProperty);
+            // target voxel size (uniform)
+            if (useTargetVoxelSize) EditorGUILayout.PropertyField(TargetVoxelSizeProperty);
+            			
+			EditorGUILayout.PropertyField(useStandardBorderProperty);
 
-            }
             //dimensions, if using target voxel size show dimensions as non editable
             EditorGUI.BeginDisabledGroup(useTargetVoxelSize);
             EditorGUILayout.PropertyField(DimensionsProperty);
@@ -117,7 +119,7 @@ namespace SDFr.Editor
         
         public void OnSceneGUI()
         {
-            if (Selection.activeGameObject == null) return;
+			if (Selection.activeGameObject == null) return;
 
             DrawEditableBounds();
         }

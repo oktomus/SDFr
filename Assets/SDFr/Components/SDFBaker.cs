@@ -4,6 +4,8 @@ using UnityEngine;
 
 namespace SDFr
 {
+	public enum Visualisation {  Normal, IntensitySteps, HeatmapSteps, Distance }
+
     [ExecuteInEditMode] //required for previewing
     public class SDFBaker : AVolumeBaker<SDFVolume,SDFData>
     {
@@ -12,12 +14,41 @@ namespace SDFr
         [SerializeField] private float jitterScale = 0.75f;
         [SerializeField] private bool sdfFlip; //invert sign of preview
         [SerializeField] private float previewEpsilon = 0.003f;
-        [SerializeField] private float previewNormalDelta = 0.03f;
-        
+        [SerializeField] private float previewNormalDelta = 0.02f;
+        [SerializeField] private Visualisation previewMode = Visualisation.Normal;
+		
+
         [SerializeField] private SDFData sdfData;
         [SerializeField] private Texture3D debugTex3D; //for viewing existing texture3D not baked with SDFr
 
+		public ComputeShader  volumeComputeMethodsShader;
+
         public override int MaxDimension => 256;
+
+		public void LogDistances()
+		{
+			// No debugging if the volume is > 8^3 as thats more than 512 entries!
+			if ( sdfData.sdfTexture.width * sdfData.sdfTexture.height * sdfData.sdfTexture.depth > 512 ) return;
+			
+			float[] data    = VolumeComputeMethods.ExtractVolumeFloatData( sdfData.sdfTexture, volumeComputeMethodsShader);
+			Vector3Int dim  = new Vector3Int( sdfData.sdfTexture.width, sdfData.sdfTexture.height, sdfData.sdfTexture.depth);
+			string log      = $"{this.name}  Dimension: {dim}  MaxLength: {sdfData.maxDistance} Mag: {bounds.size.magnitude}\n";
+
+			for ( int z = 0; z < sdfData.sdfTexture.depth; z++ )
+			{
+				for ( int y = 0; y < sdfData.sdfTexture.height; y++ )
+				{
+					for ( int x = 0; x < sdfData.sdfTexture.width; x++ )
+					{
+						log += string.Format( "{0:F6}, ", data[ z * dim.y * dim.x + y * dim.x + x ] * bounds.size.magnitude );
+					}
+					log += "\n";
+				}
+				log += "\n";
+			}
+
+			Debug.Log(log);
+		}
 
 #if UNITY_EDITOR
         
@@ -50,11 +81,10 @@ namespace SDFr
             
             //try to get active camera...
             Camera cam = Camera.main;
+
+            // lastActiveSceneView
+            if (SceneView.currentDrawingSceneView != null) cam = SceneView.currentDrawingSceneView.camera;
             
-            if (UnityEditor.SceneView.lastActiveSceneView != null)
-            {
-                cam = UnityEditor.SceneView.lastActiveSceneView.camera;
-            }
             SDFPreview preview = _aPreview as SDFPreview;
             
             preview?.Draw(cam,sdfFlip,previewEpsilon,previewNormalDelta);
@@ -68,7 +98,7 @@ namespace SDFr
             }
             bakedRenderers.Clear();
                         
-            AVolumeSettings settings = new AVolumeSettings(bounds,dimensions);
+            AVolumeSettings settings = new AVolumeSettings(bounds, dimensions, useStandardBorder);
             
             //first check if any objects are parented to this object
             //if anything is found, try to use renderers from those instead of volume overlap
@@ -117,6 +147,25 @@ namespace SDFr
                 }
             }
             
+			// If not exisiting asset get path to save sdfData to.
+			if ( string.IsNullOrEmpty( path ) )
+			{
+				string suggestedName = "sdfData_" + this.name;
+
+				path = EditorUtility.SaveFilePanelInProject( "Save As...", suggestedName, "asset", "Save the SDF Data" );
+				
+				if ( string.IsNullOrEmpty( path ) )
+				{
+					if ( EditorUtility.DisplayDialog( "Error", "Path was invalid, retry?", "ok", "cancel" ) )
+					{
+						path = EditorUtility.SaveFilePanelInProject( "Save As...", suggestedName, "asset", "Save the SDF Data" );
+					}
+
+					if ( string.IsNullOrEmpty( path ) ) return;					
+				}
+			}
+
+
             //create new SDFData
             sdfData = ScriptableObject.CreateInstance<SDFData>();
             sdfData.bounds = sdfVolume.Settings.BoundsLocal;
@@ -126,10 +175,11 @@ namespace SDFr
             float minAxis = Mathf.Min( sdfData.bounds.size.x, Mathf.Min( sdfData.bounds.size.y, sdfData.bounds.size.z ) );
             sdfData.nonUniformScale = new Vector3( sdfData.bounds.size.x/minAxis, sdfData.bounds.size.y/minAxis, sdfData.bounds.size.z/minAxis );
 
-            Texture3D newTex = new Texture3D(
-                sdfVolume.Settings.Dimensions.x, sdfVolume.Settings.Dimensions.y, sdfVolume.Settings.Dimensions.z,
-                TextureFormat.RHalf, false);
+			bool mipmaps = true;
 
+			// Create Texture3D and set name to filename of sdfData
+            Texture3D newTex	= new Texture3D( sdfData.dimensions.x, sdfData.dimensions.y, sdfData.dimensions.z, TextureFormat.RHalf, mipmaps);
+			newTex.name			= System.IO.Path.GetFileNameWithoutExtension(path);
             
             //TODO improve
             Color[] colorBuffer = new Color[distances.Length];
@@ -144,27 +194,9 @@ namespace SDFr
             }
             newTex.SetPixels(colorBuffer);
             newTex.Apply();
-
-            if (string.IsNullOrEmpty(path))
-            {
-                //ask for path
-                path = EditorUtility.SaveFilePanelInProject("Save As...", "sdfData", "asset", "Save the SDF Data");
-            }
-
-            if (string.IsNullOrEmpty(path))
-            {
-                if (EditorUtility.DisplayDialog("Error", "Path was invalid, retry?", "ok", "cancel"))
-                {
-                    path = EditorUtility.SaveFilePanelInProject("Save As...", "sdfData", "asset", "Save the SDF Data");
-                }
-
-                if (string.IsNullOrEmpty(path))
-                {
-                    return;
-                }
-            }
-
-            sdfData.sdfTexture = newTex;
+			
+			 
+            sdfData.sdfTexture	= newTex;
             sdfData.maxDistance = maxDistance;
             
             EditorUtility.SetDirty(sdfData);
@@ -181,6 +213,63 @@ namespace SDFr
             if (!IsPreviewing ) 
                 TogglePreview();
         }
+
+		public void BakeHalfSizeTest()
+		{
+			SDFData sdfmip		= ScriptableObject.CreateInstance<SDFData>();
+            sdfmip.bounds		= sdfData.bounds;
+            sdfmip.voxelSize	= sdfData.voxelSize * 2;
+            sdfmip.dimensions	= new Vector3Int( sdfData.dimensions.x/2, sdfData.dimensions.y/2, sdfData.dimensions.z/2 );
+
+            float minAxis = Mathf.Min( sdfmip.bounds.size.x, Mathf.Min( sdfmip.bounds.size.y, sdfmip.bounds.size.z ) );
+            sdfmip.nonUniformScale = new Vector3( sdfmip.bounds.size.x/minAxis, sdfmip.bounds.size.y/minAxis, sdfmip.bounds.size.z/minAxis );
+			
+			
+			// Save sdf
+			string suggestedName = "sdfData_" + this.name + "_HalfBake";
+			string path			 = EditorUtility.SaveFilePanelInProject( "Save As...", suggestedName, "asset", "Save the SDF Data" );
+
+			if ( string.IsNullOrEmpty( path ) )
+			{
+				if ( EditorUtility.DisplayDialog( "Error", "Path was invalid, retry?", "ok", "cancel" ) )				
+					path = EditorUtility.SaveFilePanelInProject( "Save As...", suggestedName, "asset", "Save the SDF Data" );
+				
+				if ( string.IsNullOrEmpty( path ) ) return;
+			}
+
+			// GetDistances from srcVolume
+			float[] distances	= VolumeComputeMethods.ExtractVolumeFloatData( sdfData.sdfTexture, volumeComputeMethodsShader);
+			Vector3Int dim		= new Vector3Int( sdfData.sdfTexture.width, sdfData.sdfTexture.height, sdfData.sdfTexture.depth);
+
+			// Get half size data
+            Color[] colorBuffer = new Color[distances.Length/2/2/2];
+
+			int index = 0;
+
+			for ( int z = 0; z < sdfData.sdfTexture.depth; z+=2 )			
+				for ( int y = 0; y < sdfData.sdfTexture.height; y+=2 )				
+					for ( int x = 0; x < sdfData.sdfTexture.width; x+=2 )					
+						colorBuffer[index++] = new Color( distances[ z * dim.y * dim.x + y * dim.x + x ] ,0f, 0f, 0f);				
+			
+			
+			// Create Texture3D and set name to filename of sdfData
+            Texture3D newTex	= new Texture3D( sdfmip.dimensions.x, sdfmip.dimensions.y, sdfmip.dimensions.z, TextureFormat.RHalf, false);
+			newTex.name			= System.IO.Path.GetFileNameWithoutExtension(path); 			
+            newTex.SetPixels(colorBuffer);
+            newTex.Apply();
+						 
+            sdfmip.sdfTexture	= newTex;
+            sdfmip.maxDistance = sdfData.maxDistance; // TODO - IS this still constant?
+
+			EditorUtility.SetDirty(sdfmip);
+                        
+            //create it
+            AssetDatabase.CreateAsset(sdfmip, path);
+            AssetDatabase.AddObjectToAsset(newTex,sdfmip);
+            
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+		}
 #endif
     }
 }

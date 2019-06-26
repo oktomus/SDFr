@@ -1,4 +1,4 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using SDFr;
@@ -78,13 +78,15 @@ public class VFXSDFSetup : MonoBehaviour
         //render preview - only for testing!
         //try to get active camera...
         Camera cam = Camera.main;
-            
-        if (UnityEditor.SceneView.lastActiveSceneView != null)
+
+#if UNITY_EDITOR          
+		if (UnityEditor.SceneView.lastActiveSceneView != null)
         {
             cam = UnityEditor.SceneView.lastActiveSceneView.camera;
         }
+#endif
 
-        if (_material == null)
+		if (_material == null)
         {
             Shader shader = Shader.Find("XRA/SDFr");
             if (shader != null)

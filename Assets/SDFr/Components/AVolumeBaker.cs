@@ -13,11 +13,17 @@ namespace SDFr
         [SerializeField] protected List<Renderer> bakedRenderers;
         [SerializeField] float targetVoxelSize;
         [SerializeField] protected bool useTargetVoxelSize = false;
+		[SerializeField] protected bool useStandardBorder; //invert sign of preview
+
+		public static bool showAllPreviews = false;
 
         public abstract int MaxDimension { get; }
+
+#if UNITY_EDITOR
         public abstract AVolumePreview<D> CreatePreview();
-        
-        public void TogglePreview()
+
+
+		public void TogglePreview()
         {
             if ( !RenderersEnabled ) EnableRenderers( true );
             
@@ -52,7 +58,7 @@ namespace SDFr
         public virtual void Encapsulate()
         {
             List<Renderer> tempRenderers = new List<Renderer>();
-            AVolumeSettings settings = new AVolumeSettings(bounds,dimensions);
+            AVolumeSettings settings = new AVolumeSettings(bounds, dimensions, useStandardBorder);
             GetMeshRenderersInChildren(ref settings, ref tempRenderers, transform, fitToVertices);
             bounds = settings.BoundsLocal;
         }
@@ -120,11 +126,13 @@ namespace SDFr
                 return false;
             }
 
+			Debug.Log( $"GetMeshRenderersInChildren newBounds: {newBounds.center}  Size: {newBounds.size}  Dimensions: {settings.Dimensions}");
+
             //assign new bounds
             //remove the world offset            
             newBounds = new Bounds(newBounds.center - target.position, newBounds.size);
 
-            settings = new AVolumeSettings(newBounds,settings.Dimensions);
+            settings = new AVolumeSettings(newBounds, settings.Dimensions, settings.StandardBorder );
             AVolumeSettings.AddBoundsBorder(ref settings);
 
             return true;
@@ -177,7 +185,6 @@ namespace SDFr
             return b;
         }
         
-#if UNITY_EDITOR
         private static Color colorPreviewBounds = new Color(0.5f,1f,0.5f,0.5f);
     
         protected AVolumePreview<D> _aPreview;
@@ -209,16 +216,21 @@ namespace SDFr
 
         protected virtual void OnDrawGizmos()
         {
+			if ( showAllPreviews ) DrawGizmos( true, false );
+			/*
             //draw bounds to indicate preview
             //ignore scale of transform
             var transform1 = transform;
             Gizmos.matrix = Matrix4x4.TRS(transform1.position, transform1.rotation, Vector3.one);
             Gizmos.color = colorPreviewBounds;
             Gizmos.DrawWireCube(bounds.center, bounds.size);
+			*/
         }
 
         private void OnDrawGizmosSelected()
         {
+			DrawGizmos( !showAllPreviews, true );
+/*
             //draw voxel size
             var transform1 = transform;
             Gizmos.matrix = Matrix4x4.TRS(transform1.position, transform1.rotation, Vector3.one);
@@ -226,7 +238,29 @@ namespace SDFr
             Vector3 voxelSize = new Vector3( bounds.size.x/dimensions.x, bounds.size.y/dimensions.y, bounds.size.z/dimensions.z);
             Bounds voxelBounds = new Bounds(bounds.center - bounds.extents + (voxelSize*0.5f), voxelSize);
             Gizmos.DrawWireCube(voxelBounds.center, voxelBounds.size);
+			*/
         }
+
+		void DrawGizmos( bool showPreview, bool showVoxel )
+		{
+			//ignore scale of transform
+            var transform1 = transform;
+            Gizmos.matrix = Matrix4x4.TRS(transform1.position, transform1.rotation, Vector3.one);
+
+			if ( showPreview )
+			{
+				Gizmos.color = colorPreviewBounds;
+				Gizmos.DrawWireCube( bounds.center, bounds.size );
+			}
+
+			if ( showVoxel )
+			{
+				Gizmos.color = Color.red;
+				Vector3 voxelSize = new Vector3( bounds.size.x/dimensions.x, bounds.size.y/dimensions.y, bounds.size.z/dimensions.z);
+				Bounds voxelBounds = new Bounds(bounds.center - bounds.extents + (voxelSize*0.5f), voxelSize);
+				Gizmos.DrawWireCube(voxelBounds.center, voxelBounds.size);
+			}
+		}
 #endif
         
     }

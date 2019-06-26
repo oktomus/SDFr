@@ -16,7 +16,8 @@ Shader "XRA/SDFr"
     
     #include "SDFrProcedural.hlsl"
     #include "SDFrVolumeTex.hlsl"
-    
+	#include "SDFrUtilities.hlsl"
+
     uniform float4x4 _PixelCoordToViewDirWS;
     
     Texture2D _BlueNoiseRGBA;
@@ -37,20 +38,6 @@ Shader "XRA/SDFr"
         return _BlueNoiseRGBA.SampleLevel( sampler_point_repeat_BlueNoiseRGBA, screenCoords, 0 );
     }
     
-    float3 HsvToRgb(float3 c)
-    {
-        const float4 K = float4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-        float3 p = abs(frac(c.xxx + K.xyz) * 6.0 - K.www);
-        return c.z * lerp(K.xxx, saturate(p - K.xxx), c.y);
-    }
-    
-    float map(float value, float istart, float istop, float ostart, float ostop)
-    {
-        float perc = (value - istart) / (istop - istart);
-        value = perc * (ostop-ostart) + ostart;
-        return value;
-    }
-    
     ENDHLSL
 	
 	SubShader
@@ -69,11 +56,12 @@ Shader "XRA/SDFr"
             Cull front
                         
             HLSLPROGRAM 
+			// TODO: In 2019 - change to shader_feature_local 
+			#pragma shader_feature _ SDFr_VISUALIZE_STEPS SDFr_VISUALIZE_HEATMAP SDFr_VISUALIZE_DIST
+
             #pragma vertex vert_proc_quad
             #pragma fragment Frag
-
-            #pragma shader_feature SDFr_VISUALIZE_STEPS
-
+		
             #define MAX_STEPS 1024
             #define EPSILON 0.003
             #define NORMAL_DELTA 0.03
@@ -85,22 +73,39 @@ Shader "XRA/SDFr"
             float _SDFVolumeFlip;
             float _SDFPreviewEpsilon = EPSILON;
             float _SDFPreviewNormalDelta = NORMAL_DELTA;
-                                                
-            float DistanceFunction( float3 rayPosLS )
-            {
-                float3 vp = rayPosLS;
-                vp += 0.5;
-                
-                float sample = _SDFVolumeTex.SampleLevel( sdfr_sampler_linear_clamp, vp, 0 ).r;                
-                
-                if ( _SDFVolumeFlip < 0 )
-                {
-                    sample = -sample;
-                }
-                
-                return sample;
-            }
-                        
+
+			inline float DistanceFunction(float3 rayPosLS)
+			{
+				float3 vp = rayPosLS + 0.5;
+
+				// Testing filtering and mip levels
+				float sample = _SDFVolumeTex.SampleLevel(sdfr_sampler_linear_clamp, vp, 0).r;
+				// float sample = _SDFVolumeTex.SampleLevel(sdfr_sampler_trilinear_clamp, vp, 0).r;
+				// float sample = _SDFVolumeTex.Sample(sdfr_sampler_trilinear_clamp, vp).r;
+				// if (_SDFVolumeFlip < 0) sample = -sample;
+				return (_SDFVolumeFlip < 0) ? -sample : sample;
+			}
+
+			// Should normalDeltas be cached?
+			inline float3 GenerateNormalsFast(float normalDelta, float dist, float3 rayPosLS)
+			{
+				float3 nx = rayPosLS + float3(normalDelta, 0, 0);
+				float3 ny = rayPosLS + float3(0, normalDelta, 0);
+				float3 nz = rayPosLS + float3(0, 0, normalDelta);
+				float dx = DistanceFunction(nx) - dist;
+				float dy = DistanceFunction(ny) - dist;
+				float dz = DistanceFunction(nz) - dist;
+				return normalize(float3(dx, dy, dz));
+			}
+
+			inline float3 GenerateNormals(float normalDelta, float dist, float3 rayPosLS)
+			{
+				float dx = DistanceFunction(rayPosLS + float3(normalDelta, 0, 0)) - DistanceFunction(rayPosLS - float3(normalDelta, 0, 0));
+				float dy = DistanceFunction(rayPosLS + float3(0, normalDelta, 0)) - DistanceFunction(rayPosLS - float3(0, normalDelta, 0));
+				float dz = DistanceFunction(rayPosLS + float3(0, 0, normalDelta)) - DistanceFunction(rayPosLS - float3(0, 0, normalDelta));
+				return normalize(float3(dx, dy, dz));
+			}
+
             struct OutputPS
             {
                 half4 color : COLOR0;
@@ -147,10 +152,10 @@ Shader "XRA/SDFr"
                     //accumulate distance samples
                     float dist = 0; 
                     //accumulate the steps
-                    half s = 0;
+                    int steps = 0;
                     
                     UNITY_LOOP
-                    while( dist < distanceInVolume )
+                    while( dist < distanceInVolume && steps < MAX_STEPS )
                     {
                         //current position of ray
                         //since it is in local space always use the intersection enter position
@@ -162,48 +167,51 @@ Shader "XRA/SDFr"
                         //the ray position at current step
                         //normalize into volume texture space 
                         rayPosLS /= _SDFVolumeExtents.xyz*2;
-                        float d = DistanceFunction(rayPosLS);
+						float d = DistanceFunction(rayPosLS);
                         
                         UNITY_BRANCH
                         if ( d < eps )
                         {
-                            //fast normal
-                            float3 nx = rayPosLS + float3(normalDelta,0,0);
-                            float3 ny = rayPosLS + float3(0,normalDelta,0);
-                            float3 nz = rayPosLS + float3(0,0,normalDelta);
-                            float dx = DistanceFunction(nx)-d;
-                            float dy = DistanceFunction(ny)-d;
-                            float dz = DistanceFunction(nz)-d;
-                            float3 normalLS = normalize(float3(dx,dy,dz));
-                            
+						//	float3 normalLS = GenerateNormalsFast(normalDelta, d, rayPosLS);
+							float3 normalLS = GenerateNormals(normalDelta * 0.5, d, rayPosLS);
+
                             //object to world space normals 
                             float3 normalWS = mul((float3x3)_SDFVolumeLocalToWorld,normalLS);
                             
                             //local to world ray hit position
                             float3 rayHitWS = mul(_SDFVolumeLocalToWorld,float4(rayPosLS,1)).xyz;
                             
+							// BUG: Depth value appears incorrect in preview mode - it intersects with geometry when it shouldn't.
+						
                             //NOTE only needed for depth if mixing with depth buffer
-                            float4 ndc = mul(UNITY_MATRIX_MVP,float4(rayHitWS,1));
+                            // float4 ndc = UnityObjectToClipPos(float4(rayHitWS, 1)); 
+							float4 ndc = mul(UNITY_MATRIX_MVP,float4(rayHitWS,1));
+						//	float4 ndc = mul(UNITY_MATRIX_VP, float4(rayHitWS, 1));
                             float realDepth = ndc.z/ndc.w;                   
                             o.depth = realDepth;
-                            
-                            #ifdef SDFr_VISUALIZE_STEPS
-                            //brighter = more steps = more expensive
-                            const float mn = 100/360.0;
-                            const float mx = 1;
-                            float stepf = s/MAX_STEPS;
-                            float rv = map( stepf, 0.0, 1.0, mn, mx );
-                            float3 hue = HsvToRgb( float3( rv, 1, 1 ) );
-                            //o.color = half4(hue,1);
-                            o.color = stepf;
-                            #else
-                            //visualize world normals 
-                            o.color = half4(normalWS*0.5+0.5,1);
-                            #endif
+							
+						//	float4 clippos = mul(UNITY_MATRIX_IT_MV, float4(rayHitWS, 1.0));
+						//	o.depth = clippos.z;
+
+#ifdef SDFr_VISUALIZE_DIST
+							o.color = half4(0, 0, dist / 10.0, 1);
+#elif SDFr_VISUALIZE_STEPS
+							o.color = half4(steps / (float)MAX_STEPS, 0, 0, 1);
+#elif SDFr_VISUALIZE_HEATMAP
+							// HeatMap - Green = minimal, Red = maximum number of steps
+							float	stepf = steps / (float)MAX_STEPS;
+							float	hue = lerp(0.33, 0.0, stepf);
+							float3	rgb = HsvToRgb(float3(hue, 1, 1));
+							o.color = half4(rgb, 1);
+#else
+							//visualize world normals 
+							o.color = half4(normalWS*0.5 + 0.5, 1);
+#endif
+
                             return o;
                         }
                         dist += d;
-                        s += 1.0;
+						steps++;
                     }
                 }
                 //else did not intersect volume, discard 
