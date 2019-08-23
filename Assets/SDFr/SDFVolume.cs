@@ -445,13 +445,13 @@ namespace SDFr
                 Transform t = r.transform;
                 vec3 tPosition = t.position;
                 Quaternion tRotation = t.rotation;
-                vec3 tLocalScale = t.localScale;
+                vec3 tScale = t.lossyScale;
 
                 //front facing collision
                 GameObject front = new GameObject {layer = LAYER_FRONT_GEO};
                 front.transform.position = tPosition;
                 front.transform.rotation = tRotation;
-                front.transform.localScale = tLocalScale;
+                front.transform.localScale = tScale;
                 MeshCollider frontCollider = front.AddComponent<MeshCollider>();
                 frontCollider.cookingOptions = MeshColliderCookingOptions.None;
                 frontCollider.convex = false;
@@ -463,7 +463,7 @@ namespace SDFr
                 GameObject back = new GameObject {layer = LAYER_BACK_GEO};
                 back.transform.position = tPosition;
                 back.transform.rotation = tRotation;
-                back.transform.localScale = tLocalScale;
+                back.transform.localScale = tScale;
                 MeshCollider backCollider = back.AddComponent<MeshCollider>();
                 backCollider.cookingOptions = MeshColliderCookingOptions.None;
                 backCollider.convex = false;
