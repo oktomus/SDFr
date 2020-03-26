@@ -25,6 +25,9 @@ namespace SDFr
 
         public override int MaxDimension => 256;
 
+        public bool CanLogDistances => (sdfData != null && sdfData.sdfTexture != null) &&
+	        sdfData.sdfTexture.width * sdfData.sdfTexture.height * sdfData.sdfTexture.depth <= 512;
+        
 		public void LogDistances()
 		{
 			// No debugging if the volume is > 8^3 as thats more than 512 entries!
@@ -97,16 +100,16 @@ namespace SDFr
                 bakedRenderers = new List<Renderer>();
             }
             bakedRenderers.Clear();
-                        
-            AVolumeSettings settings = new AVolumeSettings(bounds, dimensions, useStandardBorder);
+			
+            AVolumeSettings settings = new AVolumeSettings(bounds, dimensions);
             
             //first check if any objects are parented to this object
             //if anything is found, try to use renderers from those instead of volume overlap
-            if (!SDFBaker.GetMeshRenderersInChildren( ref settings, ref bakedRenderers, transform, fitToVertices))
+            if (!GetChildRenderersAndEncapsulate( ref settings, ref bakedRenderers, transform))
             {
                 //otherwise try to get renderers intersecting the volume
                 //get mesh renderers within volume
-                if (!SDFBaker.GetMeshRenderersIntersectingVolume( settings, transform, ref bakedRenderers))
+                if (!GetMeshRenderersIntersectingVolume( settings, transform, ref bakedRenderers))
                 {
                     //TODO display error?
                     return;

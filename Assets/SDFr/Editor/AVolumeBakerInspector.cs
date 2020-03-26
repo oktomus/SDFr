@@ -12,9 +12,9 @@ namespace SDFr.Editor
         //serialized properties
         protected SerializedProperty DimensionsProperty;
         protected SerializedProperty BoundsProperty;
-        protected SerializedProperty UseTargetVoxelSizeProperty;		
-		protected SerializedProperty useStandardBorderProperty;
+        protected SerializedProperty UseTargetVoxelSizeProperty;
         protected SerializedProperty TargetVoxelSizeProperty;
+        protected SerializedProperty useManualBoundsProperty;
 		
         protected const string StrBake = "Bake";
         protected const string StrPreview = "Preview";
@@ -25,8 +25,8 @@ namespace SDFr.Editor
         protected const string StrPropBounds = "bounds";
         protected const string StrPropUseTargetVoxelSize = "useTargetVoxelSize";
         protected const string StrPropTargetVoxelSize = "targetVoxelSize";
-        protected const string StrEncapsulate = "Encapsulate";        
-		protected const string strPropStandardBorder = "useStandardBorder";
+        protected const string StrEncapsulate = "Encapsulate";
+        protected const string StrPropUseManualBounds = "useManualBounds";
 
         [SerializeField] protected Color ColorHandles = new Color(0.5f,1f,1f,1f);
         [SerializeField] protected Color ColorWires = new Color(0.5f,1f,0.5f,1f);
@@ -39,8 +39,8 @@ namespace SDFr.Editor
             BoundsProperty = serializedObject.FindProperty(StrPropBounds);
             DimensionsProperty = serializedObject.FindProperty(StrPropDimensions);
             UseTargetVoxelSizeProperty = serializedObject.FindProperty(StrPropUseTargetVoxelSize);
-			useStandardBorderProperty = serializedObject.FindProperty(strPropStandardBorder);
             TargetVoxelSizeProperty = serializedObject.FindProperty(StrPropTargetVoxelSize);
+            useManualBoundsProperty = serializedObject.FindProperty(StrPropUseManualBounds);
         }
         
         protected virtual void OnEnable()
@@ -74,22 +74,24 @@ namespace SDFr.Editor
 
         protected void DrawBaseGUI()
         {
-            EditorGUILayout.PropertyField(UseTargetVoxelSizeProperty);
-            bool useTargetVoxelSize = UseTargetVoxelSizeProperty.boolValue;
+            //TODO target voxel size needs work to be useful 
+            //EditorGUILayout.PropertyField(UseTargetVoxelSizeProperty);
+            //bool useTargetVoxelSize = UseTargetVoxelSizeProperty.boolValue;
+            //
+            //// target voxel size (uniform)
+            //if (useTargetVoxelSize) EditorGUILayout.PropertyField(TargetVoxelSizeProperty);
             
-            // target voxel size (uniform)
-            if (useTargetVoxelSize) EditorGUILayout.PropertyField(TargetVoxelSizeProperty);
-            			
-			EditorGUILayout.PropertyField(useStandardBorderProperty);
-
             //dimensions, if using target voxel size show dimensions as non editable
-            EditorGUI.BeginDisabledGroup(useTargetVoxelSize);
+            //EditorGUI.BeginDisabledGroup(useTargetVoxelSize);
             EditorGUILayout.PropertyField(DimensionsProperty);
-            EditorGUI.EndDisabledGroup();
+            //EditorGUI.EndDisabledGroup();
 
             //bounds
             EditorGUILayout.PropertyField(BoundsProperty);
+            //allow manual bounds
+            EditorGUILayout.PropertyField(useManualBoundsProperty);
             
+            EditorGUI.BeginDisabledGroup( useManualBoundsProperty.boolValue );
             if (GUILayout.Button(StrEncapsulate))
             {
                 T baker = target as T;
@@ -97,8 +99,10 @@ namespace SDFr.Editor
                 {
                     baker.Encapsulate();
                 }
+                SceneView.lastActiveSceneView.Repaint();
+                SceneView.RepaintAll();
             }
-            
+            EditorGUI.EndDisabledGroup();
         }
 
         protected virtual void BakeControls()
@@ -157,7 +161,7 @@ namespace SDFr.Editor
                 BoundsProperty.boundsValue.size.y/DimensionsProperty.vector3IntValue.y, 
                 BoundsProperty.boundsValue.size.z/DimensionsProperty.vector3IntValue.z);
             Bounds voxelBounds = new Bounds(BoundsProperty.boundsValue.center - BoundsProperty.boundsValue.extents + (voxelSize*0.5f), voxelSize);
-            Gizmos.DrawWireCube(voxelBounds.center, voxelBounds.size);
+            Handles.DrawWireCube(voxelBounds.center,voxelBounds.size);
 
             if (serializedObject.ApplyModifiedProperties())
             {

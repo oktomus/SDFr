@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
@@ -64,15 +63,15 @@ namespace SDFr
 
 			bakedRenderers.Clear();
 
-			AVolumeSettings settings = new AVolumeSettings(bounds, dimensions, useStandardBorder);
+			AVolumeSettings settings = new AVolumeSettings(bounds, dimensions);
 
 			//first check if any objects are parented to this object
 			//if anything is found, try to use renderers from those instead of volume overlap
-			if ( !SDFBaker.GetMeshRenderersInChildren( ref settings, ref bakedRenderers, transform, fitToVertices ) )
+			if ( !GetChildRenderersAndEncapsulate( ref settings, ref bakedRenderers, transform ) )
 			{
 				//otherwise try to get renderers intersecting the volume
 				//get mesh renderers within volume
-				if ( !SDFBaker.GetMeshRenderersIntersectingVolume( settings, transform, ref bakedRenderers ) )
+				if ( !GetMeshRenderersIntersectingVolume( settings, transform, ref bakedRenderers ) )
 				{
 					//TODO display error?
 					return;

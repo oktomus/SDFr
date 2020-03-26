@@ -7,15 +7,22 @@ namespace SDFr
         where T : AVolume<T>, new()
         where D : AVolumeData
     {
-        [SerializeField] protected Bounds bounds;
-        [SerializeField] protected Vector3Int dimensions = new Vector3Int(32,32,32);
-        [SerializeField] protected bool fitToVertices = true;
-        [SerializeField] protected List<Renderer> bakedRenderers;
-        [SerializeField] float targetVoxelSize;
-        [SerializeField] protected bool useTargetVoxelSize = false;
-		[SerializeField] protected bool useStandardBorder; //invert sign of preview
+        [SerializeField] 
+        protected Bounds bounds;
+        [SerializeField] 
+        protected Vector3Int dimensions = new Vector3Int(32,32,32);
+        [SerializeField,Tooltip("Encapsulate Bounds using Vertices (exact)")] 
+        protected bool fitToVertices = true;
+        [SerializeField] 
+        protected List<Renderer> bakedRenderers;
+        [SerializeField,Tooltip("Voxel size in Meters")] 
+        float targetVoxelSize;
+        [SerializeField,Tooltip("Use a specified voxel size instead of dimensions")] 
+        protected bool useTargetVoxelSize;
+        [SerializeField,Tooltip("Use manually defined bounds, do not encapsulate")] 
+        protected bool useManualBounds;
 
-		public static bool showAllPreviews = false;
+        public static bool showAllPreviews = false;
 
         public abstract int MaxDimension { get; }
 
@@ -58,12 +65,19 @@ namespace SDFr
         public virtual void Encapsulate()
         {
             List<Renderer> tempRenderers = new List<Renderer>();
-            AVolumeSettings settings = new AVolumeSettings(bounds, dimensions, useStandardBorder);
-            GetMeshRenderersInChildren(ref settings, ref tempRenderers, transform, fitToVertices);
+            AVolumeSettings settings = new AVolumeSettings(bounds, dimensions);
+            GetChildRenderersAndEncapsulate(ref settings, ref tempRenderers, transform);
             bounds = settings.BoundsLocal;
         }
         
-        public static bool GetMeshRenderersInChildren( ref AVolumeSettings settings, ref List<Renderer> renderers, Transform target, bool fitToVertices )
+        /// <summary>
+        /// Gets all Renderers parented to the VolumeBaker & Encapsulates them with the bounds (unless manual bounds is enabled)
+        /// </summary>
+        /// <param name="settings"></param>
+        /// <param name="renderers"></param>
+        /// <param name="target"></param>
+        /// <returns></returns>
+        public bool GetChildRenderersAndEncapsulate( ref AVolumeSettings settings, ref List<Renderer> renderers, Transform target )
         {
             if (renderers == null) return false;
             
@@ -71,7 +85,7 @@ namespace SDFr
             Renderer[] mrs = target.GetComponentsInChildren<Renderer>();
             if (mrs == null || mrs.Length == 0) return false;
 
-            Bounds newBounds = new Bounds(target.position,Vector3.zero);
+            Bounds newBounds = useManualBounds ? bounds : new Bounds(target.position,Vector3.zero);
             bool first = true;
             foreach (var r in mrs)
             {
@@ -80,41 +94,44 @@ namespace SDFr
                 if (!r.gameObject.activeSelf) continue;
                 if (!r.enabled) continue;
 
-                if (!fitToVertices)
+                if (!useManualBounds) //do not change bounds if manual bounds specified
                 {
-                    newBounds.Encapsulate(r.bounds);
-                }
-                else
-                {
-                    //iterate all vertices and encapsulate
-                    Mesh mesh = null;
-                    if (r is MeshRenderer)
+                    if (!fitToVertices)
                     {
-                        MeshFilter mf = r.GetComponent<MeshFilter>();
-                        if (mf != null && mf.sharedMesh != null)
-                        {
-                            mesh = mf.sharedMesh;
-                        }
+                        newBounds.Encapsulate(r.bounds);
                     }
                     else
                     {
-                        mesh = (r as SkinnedMeshRenderer).sharedMesh;
-                    }
-
-                    if (mesh != null)
-                    {
-                        Bounds b = EncapsulateVertices(mesh, r.transform.localToWorldMatrix);
-
-                        if (first)
+                        //iterate all vertices and encapsulate
+                        Mesh mesh = null;
+                        if (r is MeshRenderer)
                         {
-                            newBounds = b;
+                            MeshFilter mf = r.GetComponent<MeshFilter>();
+                            if (mf != null && mf.sharedMesh != null)
+                            {
+                                mesh = mf.sharedMesh;
+                            }
                         }
                         else
                         {
-                            newBounds.Encapsulate(b);
+                            mesh = (r as SkinnedMeshRenderer).sharedMesh;
                         }
-                        
-                        first = false;
+
+                        if (mesh != null)
+                        {
+                            Bounds b = EncapsulateVertices(mesh, r.transform.localToWorldMatrix);
+
+                            if (first)
+                            {
+                                newBounds = b;
+                            }
+                            else
+                            {
+                                newBounds.Encapsulate(b);
+                            }
+
+                            first = false;
+                        }
                     }
                 }
 
@@ -129,10 +146,13 @@ namespace SDFr
 			Debug.Log( $"GetMeshRenderersInChildren newBounds: {newBounds.center}  Size: {newBounds.size}  Dimensions: {settings.Dimensions}");
 
             //assign new bounds
-            //remove the world offset            
-            newBounds = new Bounds(newBounds.center - target.position, newBounds.size);
+            //remove the world offset
+            if (!useManualBounds) newBounds = new Bounds(newBounds.center - target.position, newBounds.size);
 
-            settings = new AVolumeSettings(newBounds, settings.Dimensions, settings.StandardBorder );
+            settings = new AVolumeSettings(newBounds, settings.Dimensions)
+            {
+                UsePadding = !useManualBounds //no padding with manual bounds, sorry!
+            };
             AVolumeSettings.AddBoundsBorder(ref settings);
 
             return true;
@@ -198,14 +218,15 @@ namespace SDFr
             if (bounds.extents.y < float.Epsilon) bounds.extents = new Vector3(bounds.extents.x,float.Epsilon,bounds.extents.z);
             if (bounds.extents.z < float.Epsilon) bounds.extents = new Vector3(bounds.extents.x,bounds.extents.y,float.Epsilon);;
 
-            if (useTargetVoxelSize)
+            //TODO target voxel size needs work to be useful
+            /*if (useTargetVoxelSize)
             {
                 targetVoxelSize = Mathf.Max(float.Epsilon, targetVoxelSize);
                 
                 dimensions.x = Mathf.RoundToInt(bounds.size.x / targetVoxelSize);
                 dimensions.y = Mathf.RoundToInt(bounds.size.y / targetVoxelSize);
                 dimensions.z = Mathf.RoundToInt(bounds.size.z / targetVoxelSize);
-            }
+            }*/
             
             dimensions.x = Mathf.Clamp(dimensions.x, 1, MaxDimension);
             dimensions.y = Mathf.Clamp(dimensions.y, 1, MaxDimension);

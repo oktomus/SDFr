@@ -16,7 +16,7 @@ namespace SDFr.Editor
         private SerializedProperty epsilonProperty;
         private SerializedProperty normalDeltaProperty;
 		private SerializedProperty previewModeProperty;
-
+		
         private const string strPropFitToVertices = "fitToVertices";
         private const string strPropRaySamples = "raySamples";
         private const string strPropSdfData = "sdfData";
@@ -86,9 +86,16 @@ namespace SDFr.Editor
             EditorGUILayout.PropertyField(sdfDataProperty);
 			
             BakeControls();
+            
+            EditorGUILayout.Separator();
+            EditorGUILayout.LabelField("Experimental:");
+            
 			if (GUILayout.Button("BakeHalfSize")) baker.BakeHalfSizeTest();
-			if (GUILayout.Button("Log Volume Data")) baker.LogDistances();
-        }
+			if (baker.CanLogDistances)
+			{
+				if (GUILayout.Button("Log Volume Data")) baker.LogDistances();
+			}
+		}
 
 		void SetKeywords( Visualisation mode )
 		{
