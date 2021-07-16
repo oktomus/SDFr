@@ -1,7 +1,7 @@
 # SDFr
 a signed distance field baker for Unity
 
-![gif](https://www.dropbox.com/s/ka6mlx2tef1lboa/oNrM0ZMpEr.gif?raw=1)
+NOTE: Unity 2021.2 now has an SDF Baking tool packaged with Visual Effect Graph, which produces far better results, I recommend giving Unity's a try (you might also be able to manually backport it to prior editor versions).
 
 about
 -----
@@ -18,8 +18,6 @@ Updates By NoiseCrime
 - Some code change to improve performance and address some flaws in RayMarchExample Shader.
 - Mainly being used as a testbed for learning more about rayMarching through SDF.
 - Next step is a code refctor of rayMarch shaders to unify, simplify and improve overal performance.
-
-![png](https://www.dropbox.com/s/zd07uve5o4ahgls/Unity_S1LNYsiRd5.png?raw=1)
 
 License
 -------
