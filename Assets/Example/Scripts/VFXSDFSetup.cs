@@ -126,8 +126,19 @@ public class VFXSDFSetup : MonoBehaviour
         _cmd.Release();
     }
 
-    private void OnDrawGizmosSelected()
+    /// <summary>
+    /// Use the position and scale of the sdf data used at baking time.
+    /// </summary>
+    public void ApplyVolumeTransform()
     {
-            
+        if (data == null)
+        {
+            return;
+        }
+        
+        var targetTranform = sdfTransform == null ? transform : sdfTransform;
+        targetTranform.position = data.bounds.center;
+        targetTranform.localScale = data.bounds.size;
+        targetTranform.rotation = Quaternion.identity;
     }
 }
