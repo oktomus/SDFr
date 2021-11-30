@@ -21,6 +21,7 @@ public class VFXSDFSetup : MonoBehaviour
     public float normalDelta = 0.03f;
     [Range(0.0001f,0.1f)]
     public float epsilon = 0.01f;
+    public bool previewSdf = true;
 
     private readonly int _sdfrTexture = Shader.PropertyToID("SDFrTexture");
     private readonly int _sdfrTransform = Shader.PropertyToID("SDFrMatrix");
@@ -77,7 +78,7 @@ public class VFXSDFSetup : MonoBehaviour
 
     private void OnRenderObject()
     {
-        if (data == null || data.sdfTexture == null) return;
+        if (data == null || data.sdfTexture == null || !previewSdf) return;
         
         //render preview - only for testing!
         //try to get active camera...
